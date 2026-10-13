@@ -104,7 +104,7 @@ export function renderDay() {
       <h3>${day.closedAt ? 'Registro de la jornada' : 'Registro rápido'}</h3>
       ${!day.closedAt ? [['shovel', 'Excavación', 'excavation'], ['layers', 'Relleno estructural', 'fill'], ['check', 'Compactación', 'compact']].map(([i, label, preset]) => `<button class="quick-button" data-action="preset" data-preset="${preset}" data-id="${day.id}"><span class="quick-icon">${icon(i)}</span>${label}</button>`).join('') : ''}
       <button class="quick-button" data-action="navigate" data-view="resources"><span class="quick-icon">${icon('people')}</span>Personal y maquinaria</button>
-      <button class="quick-button quick-button-wa" data-action="whatsapp-report" data-id="${day.id}"><span class="quick-icon">📱</span>Enviar a Matías Ramos (WA)</button>
+      <button class="quick-button quick-button-wa" data-action="whatsapp-report" data-id="${day.id}"><span class="quick-icon">📱</span>Compartir por WhatsApp</button>
       <button class="quick-button" data-action="copy-report" data-id="${day.id}"><span class="quick-icon">${icon('report')}</span>Copiar resumen para WhatsApp</button>
       ${!day.closedAt ? `<button class="quick-button" data-action="day-notes" data-id="${day.id}"><span class="quick-icon">${icon('report')}</span>Observaciones del día</button>` : ''}
       <div class="day-info">

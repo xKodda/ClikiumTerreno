@@ -156,21 +156,20 @@ document.addEventListener('click', async event => {
           ? `https://wa.me/${clean}?text=${encodeURIComponent(text)}`
           : `https://wa.me/?text=${encodeURIComponent(text)}`;
         window.open(waUrl, '_blank');
-        toast('Abriendo WhatsApp para Matías Ramos. (Texto copiado)');
+        toast('Abriendo WhatsApp... Texto del informe copiado.');
       };
 
       if (!savedPhone) {
         showDialog(
-          'Enviar informe a Matías Ramos',
-          'Secretario Técnico · Túnel Lo Ruiz',
-          `<div style="display:flex;flex-direction:column;gap:14px">
-            <p style="font-size:0.9rem;color:#475569;margin:0">Ingresa el número de WhatsApp de Matías Ramos para enviarle el informe diario con 1 clic:</p>
+          'WhatsApp de Secretaría Técnica',
+          'Solo se solicitará esta primera vez',
+          `<div style="display:flex;flex-direction:column;gap:12px">
+            <p style="font-size:0.875rem;color:#475569;margin:0">Ingresa el número de destino para enviar los informes directos por WhatsApp:</p>
             <label class="field">
-              <span>Número de WhatsApp (Chile)</span>
-              <input type="tel" id="matias-phone-input" placeholder="+56 9 1234 5678" style="font-size:1rem;font-weight:600">
+              <span>Número (+56 9...)</span>
+              <input type="tel" id="matias-phone-input" placeholder="+56 9 1234 5678" style="font-size:16px;font-weight:600">
             </label>
-            <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
-              <button type="button" class="btn btn-secondary" onclick="window.sendWaWithoutPhone()">Elegir contacto en WhatsApp</button>
+            <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:6px">
               <button type="button" class="btn btn-whatsapp" onclick="window.saveAndSendWa()">Guardar y Enviar 📱</button>
             </div>
           </div>`
@@ -180,10 +179,6 @@ document.addEventListener('click', async event => {
           if (ph) localStorage.setItem('clikium_phone_matias_ramos', ph);
           modal.close();
           sendToWhatsApp(ph);
-        };
-        window.sendWaWithoutPhone = () => {
-          modal.close();
-          sendToWhatsApp('');
         };
       } else {
         sendToWhatsApp(savedPhone);
@@ -481,55 +476,59 @@ async function load() {
     const session = await checkSession();
     if (!session) {
       $('#main').innerHTML = `
-        <div class="flex items-center justify-center min-h-[60vh]">
-          <div class="bg-white/80 backdrop-blur-xl border border-gray-200/50 p-8 rounded-2xl shadow-2xl max-w-md w-full text-center">
-            <div class="w-16 h-16 bg-blue-600 rounded-xl flex items-center justify-center mx-auto mb-5 shadow-lg shadow-blue-500/30">
-              <span class="text-3xl text-white font-bold">C</span>
+        <div class="flex items-center justify-center min-h-[70vh] px-4">
+          <div class="bg-white border border-slate-200/80 p-6 sm:p-8 rounded-2xl shadow-xl max-w-sm w-full text-center">
+            <div class="w-12 h-12 bg-slate-900 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-md">
+              <span class="text-xl text-white font-bold tracking-tight">C</span>
             </div>
-            <h2 class="text-2xl font-bold text-gray-900 mb-2">Clikium Terreno (Beta)</h2>
-            <p class="text-gray-500 mb-6 text-sm">Ingresa tu correo autorizado para acceder</p>
+            <h2 class="text-xl font-bold text-slate-900 mb-1">Clikium Terreno</h2>
+            <p class="text-slate-500 mb-5 text-xs">Acceso a faena</p>
             
-            <div class="space-y-4">
-              <input type="email" id="login-email" placeholder="tu@correo.com" class="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-gray-800 placeholder-gray-400 font-medium">
-              <button class="w-full py-4 bg-gray-900 hover:bg-black text-white font-semibold rounded-xl shadow-md transition-all active:scale-95" onclick="window.loginUser()">Enviar acceso al correo</button>
-            </div>
+            <form onsubmit="event.preventDefault(); window.loginUser();" class="space-y-3">
+              <input type="email" id="login-email" placeholder="tu@correo.com" required autocomplete="email" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 text-base outline-none focus:border-slate-800 transition-colors">
+              <button type="submit" id="login-submit-btn" class="w-full py-3 bg-slate-900 hover:bg-black text-white text-sm font-semibold rounded-xl shadow transition-all active:scale-98">Ingresar</button>
+            </form>
           </div>
         </div>`;
       
       window.loginUser = async () => {
         const email = $('#login-email').value.trim();
-        if (!email) return alert('Por favor ingresa tu correo.');
+        if (!email) return;
+        const btn = $('#login-submit-btn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Enviando…'; }
         try {
           await signInWithOtp(email);
           $('#main').innerHTML = `
-            <div class="flex items-center justify-center min-h-[60vh]">
-              <div class="bg-white/80 backdrop-blur-xl border border-gray-200/50 p-8 rounded-2xl shadow-2xl max-w-md w-full text-center">
-                <div class="w-14 h-14 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg shadow-green-500/30">
-                  <span class="text-2xl text-white">✉️</span>
+            <div class="flex items-center justify-center min-h-[70vh] px-4">
+              <div class="bg-white border border-slate-200/80 p-6 sm:p-8 rounded-2xl shadow-xl max-w-sm w-full text-center">
+                <div class="w-12 h-12 bg-emerald-500 rounded-xl flex items-center justify-center mx-auto mb-4 text-white text-xl shadow-md">
+                  ✓
                 </div>
-                <h2 class="text-xl font-bold text-gray-900 mb-2">Código enviado</h2>
-                <p class="text-gray-500 mb-5 text-sm">Enviamos un código y un enlace a<br><strong class="text-gray-900">${esc(email)}</strong></p>
+                <h2 class="text-lg font-bold text-slate-900 mb-1">Enlace enviado</h2>
+                <p class="text-slate-500 text-xs mb-4">Revisa la bandeja de<br><strong class="text-slate-800">${esc(email)}</strong></p>
                 
-                <div class="space-y-3">
-                  <input type="text" id="login-otp" placeholder="Código de 6 dígitos" maxlength="8" class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-center text-lg font-bold tracking-widest text-gray-800 focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 outline-none">
-                  <button class="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-md transition-all active:scale-95" onclick="window.submitOtp('${esc(email)}')">Verificar código y entrar</button>
+                <div id="otp-container" class="mt-4 pt-4 border-t border-slate-100">
+                  <div class="space-y-2">
+                    <input type="text" id="login-otp" placeholder="Código de 6 dígitos" maxlength="8" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-center text-base font-semibold tracking-widest text-slate-800 outline-none focus:border-slate-800">
+                    <button type="button" class="w-full py-2.5 bg-slate-900 text-white text-xs font-semibold rounded-lg shadow" onclick="window.submitOtp('${esc(email)}')">Validar código</button>
+                  </div>
                 </div>
-                <p class="text-xs text-gray-400 mt-5">También puedes pulsar directamente el enlace desde tu correo.</p>
               </div>
             </div>`;
 
           window.submitOtp = async (em) => {
             const token = $('#login-otp').value.trim();
-            if (!token) return alert('Por favor ingresa el código de 6 dígitos.');
+            if (!token) return alert('Ingresa el código.');
             try {
               await verifyOtp(em, token);
               window.location.reload();
             } catch (err) {
-              alert('Código inválido o expirado: ' + err.message);
+              alert('Código inválido: ' + err.message);
             }
           };
         } catch (e) {
           alert('Error: ' + e.message);
+          if (btn) { btn.disabled = false; btn.textContent = 'Ingresar'; }
         }
       };
       return;

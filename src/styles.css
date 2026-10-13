@@ -264,4 +264,133 @@ dialog#modal::backdrop {
   }
 }
 
+/* ==========================================================================
+   REGLAS DE IMPRESIÓN Y EXPORTACIÓN A PDF LIMPIO
+   ========================================================================== */
+@media print {
+  @page {
+    size: letter portrait;
+    margin: 12mm 10mm;
+  }
+  
+  html, body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    font-size: 10pt !important;
+    line-height: 1.4 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Ocultar elementos interactivos en el PDF */
+  .report-actions,
+  .sidebar,
+  .topbar,
+  #toast,
+  dialog,
+  button,
+  .btn,
+  .btn-whatsapp,
+  .icon-button {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  .workspace {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  main {
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .report {
+    max-width: 100% !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .report-head {
+    border-bottom: 2px solid #0f172a !important;
+    padding-bottom: 12px !important;
+    margin-bottom: 16px !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .report-head h1 {
+    font-size: 1.6rem !important;
+    margin-bottom: 4px !important;
+  }
+
+  /* Evitar cortes indeseados a mitad de hoja */
+  .report-activity {
+    border-top: 1px solid #cbd5e1 !important;
+    padding-top: 14px !important;
+    margin-top: 14px !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .photo-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+    margin-top: 12px !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .photo-grid div {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .photo-grid img {
+    width: 100% !important;
+    height: 180px !important;
+    max-height: 180px !important;
+    object-fit: cover !important;
+    border-radius: 6px !important;
+    border: 1px solid #e2e8f0 !important;
+  }
+
+  table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+    font-size: 9pt !important;
+    break-inside: auto !important;
+  }
+
+  tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  th, td {
+    padding: 8px 6px !important;
+    border-bottom: 1px solid #e2e8f0 !important;
+  }
+
+  th {
+    background: #f8fafc !important;
+  }
+
+  .report-footer {
+    margin-top: 24px !important;
+    font-size: 8pt !important;
+    color: #64748b !important;
+    border-top: 1px solid #cbd5e1 !important;
+    padding-top: 8px !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+}
+
+
 

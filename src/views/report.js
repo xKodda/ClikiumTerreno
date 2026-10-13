@@ -13,9 +13,8 @@ export function reportText(day) {
   const crewTotalHh = day.crew.reduce((n, p) => n + p.hours + (p.extra || 0), 0);
   return [
     `📋 INFORME DIARIO DE TERRENO · CLIKIUM (BETA)`,
-    `DESTINATARIO: Matías Ramos (Secretario Técnico)`,
     `PROYECTO: ${day.project}${day.isDemo ? ' · EJEMPLO' : ''}`,
-    `FECHA: ${day.date} · EMISOR: ${day.user}`,
+    `FECHA: ${day.date} · RESPONSABLE: ${day.user}`,
     `ESTADO JORNADA: ${day.closedAt ? 'Cerrada' : 'En curso'}`,
     '----------------------------------------',
     ...day.activities.flatMap((a, i) => {
@@ -52,7 +51,7 @@ export function reportText(day) {
     ...day.machines.map(m => `   • ${m.name} (${m.operator}): ${num(m.hours)}h op · ${num(m.standby)}h std-by`),
     day.notes ? `\n📝 Observaciones generales: ${day.notes}` : '',
     '',
-    `Emitido desde faena por ${day.user} para el Secretario Técnico Matías Ramos.`
+    `Emitido desde faena por ${day.user}.`
   ].filter(x => x !== undefined).join('\n');
 }
 
@@ -69,17 +68,17 @@ export function renderReport() {
 
   return `<div class="report-actions">
     <button class="btn btn-secondary" data-action="navigate" data-view="today">Volver a jornada</button>
-    <button class="btn btn-whatsapp" data-action="whatsapp-report" data-id="${day.id}">📱 Enviar a Matías Ramos (WhatsApp)</button>
+    <button class="btn btn-whatsapp" data-action="whatsapp-report" data-id="${day.id}">📱 Compartir por WhatsApp</button>
     <button class="btn btn-primary" data-action="print">${icon('report')}Imprimir / guardar PDF</button>
     <button class="btn btn-secondary" data-action="copy-report" data-id="${day.id}">Copiar texto</button>
   </div>
   <article class="report">
     <div class="report-head">
       <div>
-        <div class="eyebrow">CLIKIUM · TERRENO (VERSIÓN BETA)${day.isDemo ? ' · EJEMPLO' : ''}</div>
-        <h1>Informe diario de obra</h1>
+        <div class="eyebrow">CLIKIUM TERRENO · INFORME DIARIO${day.isDemo ? ' · EJEMPLO' : ''}</div>
+        <h1>Control de Obra y Faena</h1>
         <p style="margin:4px 0 0 0;font-size:0.95rem;color:var(--muted)">
-          <strong>Para:</strong> Matías Ramos (Secretario Técnico) &nbsp;·&nbsp; <strong>De:</strong> ${esc(day.user)} (Capataz)
+          <strong>Proyecto:</strong> ${esc(day.project)} &nbsp;·&nbsp; <strong>Capataz:</strong> ${esc(day.user)}
         </p>
       </div>
         <p>${esc(day.project)}</p>
