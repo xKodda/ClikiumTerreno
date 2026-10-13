@@ -460,7 +460,7 @@ document.addEventListener('submit', async event => {
 // BOOTSTRAP INITIALIZATION
 // ----------------------------------------------------------------------------
 import { loadState } from './data/sync.js';
-import { checkSession, signInWithOtp, verifyOtp, signOut } from './data/auth.js';
+import { checkSession, signInWithOtp, verifyOtp, signInWithPassword, signOut } from './data/auth.js';
 
 async function load() {
   window.addEventListener('online', () => retrySync(render));
@@ -484,18 +484,57 @@ async function load() {
             <h2 class="text-xl font-bold text-slate-900 mb-1">Clikium Terreno</h2>
             <p class="text-slate-500 mb-5 text-xs">Acceso a faena</p>
             
-            <form onsubmit="event.preventDefault(); window.loginUser();" class="space-y-3">
+            <form id="login-form" onsubmit="event.preventDefault(); window.loginUser();" class="space-y-3">
               <input type="email" id="login-email" placeholder="tu@correo.com" required autocomplete="email" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 text-base outline-none focus:border-slate-800 transition-colors">
+              
+              <div id="password-field-wrap" style="display:none">
+                <input type="password" id="login-password" placeholder="Contraseña de acceso" autocomplete="current-password" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 text-base outline-none focus:border-slate-800 transition-colors">
+              </div>
+
               <button type="submit" id="login-submit-btn" class="w-full py-3 bg-slate-900 hover:bg-black text-white text-sm font-semibold rounded-xl shadow transition-all active:scale-98">Ingresar</button>
+              
+              <div class="pt-1">
+                <button type="button" id="toggle-pw-btn" class="text-xs text-slate-500 hover:text-slate-800 underline bg-transparent border-0 cursor-pointer p-1" onclick="window.togglePwMode()">
+                  ¿Ingresar con contraseña?
+                </button>
+              </div>
             </form>
           </div>
         </div>`;
       
+      let usePassword = false;
+      window.togglePwMode = (forceState = null) => {
+        usePassword = forceState !== null ? forceState : !usePassword;
+        const pwWrap = $('#password-field-wrap');
+        const pwInput = $('#login-password');
+        const toggleBtn = $('#toggle-pw-btn');
+        const submitBtn = $('#login-submit-btn');
+        if (pwWrap) pwWrap.style.display = usePassword ? 'block' : 'none';
+        if (pwInput) pwInput.required = usePassword;
+        if (toggleBtn) toggleBtn.textContent = usePassword ? '¿Ingresar con enlace al correo?' : '¿Ingresar con contraseña?';
+        if (submitBtn) submitBtn.textContent = usePassword ? 'Iniciar sesión' : 'Ingresar';
+      };
+
       window.loginUser = async () => {
         const email = $('#login-email').value.trim();
         if (!email) return;
         const btn = $('#login-submit-btn');
-        if (btn) { btn.disabled = true; btn.textContent = 'Enviando…'; }
+        if (btn) { btn.disabled = true; btn.textContent = 'Verificando…'; }
+
+        // Si el modo contraseña está activo o hay contraseña escrita
+        const password = $('#login-password')?.value || '';
+        if (usePassword || password) {
+          try {
+            await signInWithPassword(email, password);
+            window.location.reload();
+            return;
+          } catch (pwErr) {
+            alert('Error con contraseña: ' + pwErr.message);
+            if (btn) { btn.disabled = false; btn.textContent = 'Iniciar sesión'; }
+            return;
+          }
+        }
+
         try {
           await signInWithOtp(email);
           $('#main').innerHTML = `
@@ -527,7 +566,12 @@ async function load() {
             }
           };
         } catch (e) {
-          alert('Error: ' + e.message);
+          if (e.message && e.message.toLowerCase().includes('rate limit')) {
+            window.togglePwMode(true);
+            alert('Límite de correos por hora superado en Supabase. Puedes ingresar inmediatamente con tu contraseña:');
+          } else {
+            alert('Error: ' + e.message);
+          }
           if (btn) { btn.disabled = false; btn.textContent = 'Ingresar'; }
         }
       };
