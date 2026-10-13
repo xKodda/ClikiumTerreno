@@ -81,8 +81,16 @@ document.addEventListener('click', async event => {
 
   try {
     if (action === 'logout') {
-      await signOut();
-      window.location.reload();
+      try {
+        await signOut();
+      } catch (e) {
+        console.error('Logout error:', e);
+      }
+      try {
+        localStorage.clear();
+        sessionStorage.clear();
+      } catch (e) {}
+      window.location.replace(window.location.origin + window.location.pathname);
       return;
     }
     if (action === 'close-modal') return modal.close();
@@ -473,110 +481,196 @@ async function load() {
   }
 
   try {
+    // Check for hash errors from previous Supabase redirect
+    let hashErrorMsg = '';
+    if (typeof window !== 'undefined' && window.location.hash) {
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      const errDesc = hashParams.get('error_description');
+      if (errDesc) {
+        hashErrorMsg = decodeURIComponent(errDesc.replace(/\+/g, ' '));
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+
     const session = await checkSession();
     if (!session) {
+      document.body.classList.add('unauthenticated');
+      const userPill = $('#user-pill');
+      if (userPill) userPill.style.display = 'none';
+
       $('#main').innerHTML = `
-        <div class="flex items-center justify-center min-h-[70vh] px-4">
-          <div class="bg-white border border-slate-200/80 p-6 sm:p-8 rounded-2xl shadow-xl max-w-sm w-full text-center">
+        <div class="flex items-center justify-center min-h-[75vh] px-4 py-8">
+          <div class="bg-white border border-slate-200/90 p-6 sm:p-8 rounded-2xl shadow-xl max-w-sm w-full text-center">
             <div class="w-12 h-12 bg-slate-900 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-md">
               <span class="text-xl text-white font-bold tracking-tight">C</span>
             </div>
             <h2 class="text-xl font-bold text-slate-900 mb-1">Clikium Terreno</h2>
-            <p class="text-slate-500 mb-5 text-xs">Acceso a faena</p>
-            
-            <form id="login-form" onsubmit="event.preventDefault(); window.loginUser();" class="space-y-3">
-              <input type="email" id="login-email" placeholder="tu@correo.com" required autocomplete="email" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 text-base outline-none focus:border-slate-800 transition-colors">
-              
-              <div id="password-field-wrap" style="display:none">
-                <input type="password" id="login-password" placeholder="Contraseña de acceso" autocomplete="current-password" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 text-base outline-none focus:border-slate-800 transition-colors">
-              </div>
+            <p class="text-slate-500 mb-4 text-xs">Acceso a faena · Túnel Lo Ruiz</p>
 
-              <button type="submit" id="login-submit-btn" class="w-full py-3 bg-slate-900 hover:bg-black text-white text-sm font-semibold rounded-xl shadow transition-all active:scale-98">Ingresar</button>
-              
-              <div class="pt-1">
-                <button type="button" id="toggle-pw-btn" class="text-xs text-slate-500 hover:text-slate-800 underline bg-transparent border-0 cursor-pointer p-1" onclick="window.togglePwMode()">
-                  ¿Ingresar con contraseña?
+            ${hashErrorMsg ? `<div class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs text-left leading-relaxed">⚠️ ${esc(hashErrorMsg)}</div>` : ''}
+            <div id="login-alert-banner"></div>
+            
+            <div class="flex border-b border-slate-200 mb-4 text-xs font-semibold">
+              <button type="button" id="tab-pw" class="flex-1 pb-2 border-b-2 border-slate-900 text-slate-900 font-bold transition-all" onclick="window.switchLoginTab('password')">
+                Contraseña
+              </button>
+              <button type="button" id="tab-otp" class="flex-1 pb-2 border-b-2 border-transparent text-slate-400 hover:text-slate-600 transition-all" onclick="window.switchLoginTab('otp')">
+                Enlace / Código
+              </button>
+            </div>
+
+            <!-- MODO CONTRASEÑA -->
+            <form id="form-password-mode" onsubmit="event.preventDefault(); window.loginWithPassword();" class="space-y-3">
+              <input type="email" id="login-email-pw" placeholder="tu@correo.com" required autocomplete="email" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 text-base outline-none focus:border-slate-800 transition-colors">
+              <input type="password" id="login-password-input" placeholder="Contraseña de acceso" required autocomplete="current-password" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 text-base outline-none focus:border-slate-800 transition-colors">
+              <button type="submit" id="btn-login-pw" class="w-full py-3 bg-slate-900 hover:bg-black text-white text-sm font-semibold rounded-xl shadow transition-all active:scale-98">
+                Iniciar sesión
+              </button>
+              <p class="text-[11px] text-slate-400 leading-normal pt-1">
+                Acceso directo recomendado sin límite de correos.
+              </p>
+            </form>
+
+            <!-- MODO ENLACE / OTP -->
+            <form id="form-otp-mode" onsubmit="event.preventDefault(); window.loginWithOtp();" class="space-y-3" style="display:none">
+              <input type="email" id="login-email-otp" placeholder="tu@correo.com" required autocomplete="email" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 text-base outline-none focus:border-slate-800 transition-colors">
+              <button type="submit" id="btn-login-otp" class="w-full py-3 bg-slate-900 hover:bg-black text-white text-sm font-semibold rounded-xl shadow transition-all active:scale-98">
+                Enviar enlace a correo
+              </button>
+              <div id="otp-input-area" style="display:none" class="pt-2">
+                <input type="text" id="login-otp-code" placeholder="Código de 6 dígitos" maxlength="8" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-center text-base font-semibold tracking-widest text-slate-800 outline-none focus:border-slate-800 mb-2">
+                <button type="button" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow" onclick="window.submitOtpCode()">
+                  Validar código
                 </button>
               </div>
+              <p class="text-[11px] text-slate-400 leading-normal pt-1">
+                Recibirás un enlace o código de un solo uso en tu correo.
+              </p>
             </form>
           </div>
         </div>`;
-      
-      let usePassword = false;
-      window.togglePwMode = (forceState = null) => {
-        usePassword = forceState !== null ? forceState : !usePassword;
-        const pwWrap = $('#password-field-wrap');
-        const pwInput = $('#login-password');
-        const toggleBtn = $('#toggle-pw-btn');
-        const submitBtn = $('#login-submit-btn');
-        if (pwWrap) pwWrap.style.display = usePassword ? 'block' : 'none';
-        if (pwInput) pwInput.required = usePassword;
-        if (toggleBtn) toggleBtn.textContent = usePassword ? '¿Ingresar con enlace al correo?' : '¿Ingresar con contraseña?';
-        if (submitBtn) submitBtn.textContent = usePassword ? 'Iniciar sesión' : 'Ingresar';
+
+      window.switchLoginTab = (mode) => {
+        const formPw = $('#form-password-mode');
+        const formOtp = $('#form-otp-mode');
+        const tabPw = $('#tab-pw');
+        const tabOtp = $('#tab-otp');
+        if (mode === 'password') {
+          formPw.style.display = 'block';
+          formOtp.style.display = 'none';
+          tabPw.className = 'flex-1 pb-2 border-b-2 border-slate-900 text-slate-900 font-bold transition-all';
+          tabOtp.className = 'flex-1 pb-2 border-b-2 border-transparent text-slate-400 hover:text-slate-600 transition-all';
+        } else {
+          formPw.style.display = 'none';
+          formOtp.style.display = 'block';
+          tabOtp.className = 'flex-1 pb-2 border-b-2 border-slate-900 text-slate-900 font-bold transition-all';
+          tabPw.className = 'flex-1 pb-2 border-b-2 border-transparent text-slate-400 hover:text-slate-600 transition-all';
+        }
       };
 
-      window.loginUser = async () => {
-        const email = $('#login-email').value.trim();
-        if (!email) return;
-        const btn = $('#login-submit-btn');
-        if (btn) { btn.disabled = true; btn.textContent = 'Verificando…'; }
+      window.loginWithPassword = async () => {
+        const email = $('#login-email-pw').value.trim();
+        const password = $('#login-password-input').value;
+        const btn = $('#btn-login-pw');
+        const banner = $('#login-alert-banner');
+        if (!email || !password) return;
 
-        // Si el modo contraseña está activo o hay contraseña escrita
-        const password = $('#login-password')?.value || '';
-        if (usePassword || password) {
-          try {
-            await signInWithPassword(email, password);
-            window.location.reload();
-            return;
-          } catch (pwErr) {
-            alert('Error con contraseña: ' + pwErr.message);
-            if (btn) { btn.disabled = false; btn.textContent = 'Iniciar sesión'; }
-            return;
+        btn.disabled = true;
+        btn.textContent = 'Verificando…';
+        if (banner) banner.innerHTML = '';
+
+        try {
+          await signInWithPassword(email, password);
+          window.location.replace(window.location.origin + window.location.pathname);
+        } catch (err) {
+          btn.disabled = false;
+          btn.textContent = 'Iniciar sesión';
+          const msg = err.message || '';
+          if (banner) {
+            banner.innerHTML = `
+              <div class="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs text-left leading-relaxed">
+                <strong>Error al ingresar:</strong> ${esc(msg)}
+                ${msg.toLowerCase().includes('invalid login credentials') ? '<br><span class="text-slate-600 mt-1 block">Si creaste tu usuario por enlace, actualiza tu contraseña en Supabase SQL Editor para ingresar.</span>' : ''}
+              </div>`;
+          } else {
+            alert('Error: ' + msg);
           }
         }
+      };
+
+      window.loginWithOtp = async () => {
+        const email = $('#login-email-otp').value.trim();
+        const btn = $('#btn-login-otp');
+        const banner = $('#login-alert-banner');
+        if (!email) return;
+
+        btn.disabled = true;
+        btn.textContent = 'Enviando…';
+        if (banner) banner.innerHTML = '';
 
         try {
           await signInWithOtp(email);
-          $('#main').innerHTML = `
-            <div class="flex items-center justify-center min-h-[70vh] px-4">
-              <div class="bg-white border border-slate-200/80 p-6 sm:p-8 rounded-2xl shadow-xl max-w-sm w-full text-center">
-                <div class="w-12 h-12 bg-emerald-500 rounded-xl flex items-center justify-center mx-auto mb-4 text-white text-xl shadow-md">
-                  ✓
-                </div>
-                <h2 class="text-lg font-bold text-slate-900 mb-1">Enlace enviado</h2>
-                <p class="text-slate-500 text-xs mb-4">Revisa la bandeja de<br><strong class="text-slate-800">${esc(email)}</strong></p>
-                
-                <div id="otp-container" class="mt-4 pt-4 border-t border-slate-100">
-                  <div class="space-y-2">
-                    <input type="text" id="login-otp" placeholder="Código de 6 dígitos" maxlength="8" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-center text-base font-semibold tracking-widest text-slate-800 outline-none focus:border-slate-800">
-                    <button type="button" class="w-full py-2.5 bg-slate-900 text-white text-xs font-semibold rounded-lg shadow" onclick="window.submitOtp('${esc(email)}')">Validar código</button>
-                  </div>
-                </div>
-              </div>
-            </div>`;
-
-          window.submitOtp = async (em) => {
-            const token = $('#login-otp').value.trim();
-            if (!token) return alert('Ingresa el código.');
-            try {
-              await verifyOtp(em, token);
-              window.location.reload();
-            } catch (err) {
-              alert('Código inválido: ' + err.message);
-            }
-          };
-        } catch (e) {
-          if (e.message && e.message.toLowerCase().includes('rate limit')) {
-            window.togglePwMode(true);
-            alert('Límite de correos por hora superado en Supabase. Puedes ingresar inmediatamente con tu contraseña:');
-          } else {
-            alert('Error: ' + e.message);
+          btn.disabled = false;
+          btn.textContent = 'Reenviar enlace';
+          $('#otp-input-area').style.display = 'block';
+          if (banner) {
+            banner.innerHTML = `
+              <div class="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs text-left leading-relaxed">
+                ✓ Enlace enviado a <strong>${esc(email)}</strong>. Puedes hacer clic en el enlace de tu correo o ingresar el código de 6 dígitos aquí abajo.
+              </div>`;
           }
-          if (btn) { btn.disabled = false; btn.textContent = 'Ingresar'; }
+        } catch (err) {
+          btn.disabled = false;
+          btn.textContent = 'Enviar enlace a correo';
+          const isRateLimit = err.message && err.message.toLowerCase().includes('rate limit');
+          if (isRateLimit) {
+            window.switchLoginTab('password');
+            const pwEmail = $('#login-email-pw');
+            if (pwEmail) pwEmail.value = email;
+            if (banner) {
+              banner.innerHTML = `
+                <div class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs text-left leading-relaxed">
+                  ⚠️ <strong>Límite de correos superado:</strong> Supabase limita los envíos por hora en cuentas gratuitas. Ingresa con tu <strong>contraseña</strong> directamente.
+                </div>`;
+            }
+          } else {
+            if (banner) {
+              banner.innerHTML = `
+                <div class="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs text-left leading-relaxed">
+                  ${esc(err.message)}
+                </div>`;
+            } else {
+              alert('Error: ' + err.message);
+            }
+          }
         }
       };
+
+      window.submitOtpCode = async () => {
+        const email = $('#login-email-otp').value.trim();
+        const token = $('#login-otp-code').value.trim();
+        const banner = $('#login-alert-banner');
+        if (!token) return alert('Ingresa el código.');
+        try {
+          await verifyOtp(email, token);
+          window.location.replace(window.location.origin + window.location.pathname);
+        } catch (err) {
+          if (banner) {
+            banner.innerHTML = `<div class="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs text-left leading-relaxed">Código inválido: ${esc(err.message)}</div>`;
+          } else {
+            alert('Código inválido: ' + err.message);
+          }
+        }
+      };
+
       return;
     }
+
+    // Authenticated! Clean state
+    stateStore.session = session;
+    document.body.classList.remove('unauthenticated');
+    const userPill = $('#user-pill');
+    if (userPill) userPill.style.display = 'inline-flex';
 
     const result = await loadState();
     

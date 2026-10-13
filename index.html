@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="/src/styles.css">
   <script type="module" src="/src/app.js"></script>
 </head>
-<body>
+<body class="unauthenticated">
   <aside class="sidebar">
     <a class="brand" href="/" aria-label="Clikium Terreno, inicio"><span class="brand-mark">c</span><span>clikium<span class="brand-sub">TERRENO</span></span></a>
     <div class="project-label">PROYECTO ACTIVO</div>
@@ -27,9 +27,9 @@
       <div class="topbar-title">CONTROL DE OBRA<span id="header-date"></span></div>
       <div class="topbar-actions">
         <span id="save-status" role="status">Conectando…</span>
-        <div class="user-pill" title="Capataz asignado">
+        <div id="user-pill" class="user-pill" title="Capataz asignado" style="display:none">
           <span class="user-pill-icon">👷</span>
-          <span id="user-display-name">Christofer Godoy</span>
+          <span id="user-display-name"></span>
           <button type="button" class="user-pill-logout" data-action="logout" title="Cerrar sesión">Salir</button>
         </div>
         <button class="icon-button" data-action="backup-view" aria-label="Abrir configuración de obra" title="Configuración de obra">⚙</button>
