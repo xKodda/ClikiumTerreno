@@ -1,0 +1,98 @@
+{
+  "capataces": [
+    {
+      "id": "christofer_godoy",
+      "nombre": "Christofer Godoy"
+    }
+  ],
+  "gruposSectores": [
+    {
+      "grupo": "Sección H1",
+      "sectores": [
+        "Cepa 1",
+        "Cepa 2",
+        "Cepa 3",
+        "Cepa 4",
+        "Cepa 5",
+        "Cepa 3 poniente",
+        "Cepa 4 poniente"
+      ]
+    },
+    {
+      "grupo": "Ejes (con PK)",
+      "sectores": [
+        "Eje 39",
+        "Eje 44",
+        "Eje 45",
+        "Eje 48",
+        "Eje 128"
+      ]
+    },
+    {
+      "grupo": "Estructura",
+      "sectores": [
+        "Estribo salida",
+        "Estribo entrada",
+        "E-124"
+      ]
+    },
+    {
+      "grupo": "Otros",
+      "sectores": [
+        "OA6",
+        "Muros TEM 9-10",
+        "Acopio cepa 4-5",
+        "Botadero",
+        "Otro"
+      ]
+    }
+  ],
+  "trabajadores": [
+    {
+      "name": "Juan Calfulaf",
+      "role": "M1"
+    },
+    {
+      "name": "Darwin Morales",
+      "role": "M1"
+    },
+    {
+      "name": "Ruperto Soto",
+      "role": "M1"
+    },
+    {
+      "name": "Juan Layten",
+      "role": "M1"
+    },
+    {
+      "name": "Bastián Delgado",
+      "role": "M1"
+    },
+    {
+      "name": "Esteban Coloma",
+      "role": "M1"
+    },
+    {
+      "name": "César Luncumilla",
+      "role": "Operador"
+    }
+  ],
+  "maquinarias": [
+    {
+      "name": "Excavadora CAT 323 · I-36",
+      "operator": "César Luncumilla"
+    },
+    {
+      "name": "Bulldozer CAT D8T · I-86",
+      "operator": "Óscar Quiroz"
+    },
+    {
+      "name": "Camión Tolva · I-154",
+      "operator": "Donosor Díaz"
+    },
+    {
+      "name": "Rodillo 14T · I-59",
+      "operator": "Daniel Contreras"
+    }
+  ]
+}

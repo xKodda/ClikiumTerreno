@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#252a31">
+  <meta name="description" content="Jornadas, avances por PK, fotos y controles de terreno — Clikium.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="/manifest.json">
+  <title>Clikium · Terreno</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='9' fill='%23252a31'/%3E%3Cpath d='M28 12H13v16h15M20 20h10' fill='none' stroke='%234f6ef7' stroke-width='4'/%3E%3C/svg%3E">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='9' fill='%23252a31'/%3E%3Cpath d='M28 12H13v16h15M20 20h10' fill='none' stroke='%234f6ef7' stroke-width='4'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/src/styles.css">
+  <script type="module" src="/src/app.js"></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="/" aria-label="Clikium Terreno, inicio"><span class="brand-mark">c</span><span>clikium<span class="brand-sub">TERRENO</span></span></a>
+    <div class="project-label">PROYECTO ACTIVO</div>
+    <div id="project-name" class="sidebar-project">Túnel Lo Ruiz</div>
+    <nav id="nav" aria-label="Navegación principal"></nav>
+    <div class="sidebar-bottom"><span class="version-tag">VERSIÓN BETA</span><span>Túnel Lo Ruiz · Faena</span></div>
+  </aside>
+  <div class="workspace">
+    <header class="topbar">
+      <div class="topbar-title">CONTROL DE OBRA<span id="header-date"></span></div>
+      <div class="topbar-actions">
+        <span id="save-status" role="status">Conectando…</span>
+        <div class="user-pill" title="Capataz asignado">
+          <span class="user-pill-icon">👷</span>
+          <span id="user-display-name">Christofer Godoy</span>
+          <button type="button" class="user-pill-logout" data-action="logout" title="Cerrar sesión">Salir</button>
+        </div>
+        <button class="icon-button" data-action="backup-view" aria-label="Abrir configuración de obra" title="Configuración de obra">⚙</button>
+      </div>
+    </header>
+    <main id="main" tabindex="-1"><div class="loading">Cargando jornadas…</div></main>
+  </div>
+  <dialog id="modal"><div id="modal-content"></div></dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

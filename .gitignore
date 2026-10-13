@@ -1,0 +1,21 @@
+# Clikium Terreno - Git Ignore
+data/*.sqlite3
+data/*.sqlite3-shm
+data/*.sqlite3-wal
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.zip
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Supabase / Vite
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+supabase/.temp/
