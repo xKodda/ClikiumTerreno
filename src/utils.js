@@ -82,10 +82,42 @@ export const TRANSFER_PURPOSES = [
   'Otra finalidad'
 ];
 
+export const CIVIL_WORKS_PROCESSES = [
+  'Cierre perimetral',
+  'Colocación de pantallas acústicas',
+  'Sumideros',
+  'Instalación de cámaras tipo A',
+  'Instalación de soleras/aceras tipo A',
+  'Instalación de soleras/aceras tipo B',
+  'Instalación y colocación de moldaje',
+  'Hormigonado',
+  'Trabajos enfierradura',
+  'Corte de asfalto con cortadora de asfalto',
+  'Otro'
+];
+
+export const STANDARD_PROCESSES = [
+  'Movimiento de tierra',
+  'Relleno estructural',
+  'Terraplén',
+  'Subrasante',
+  'Base estabilizada',
+  'Bajo 4 pulgadas',
+  'Obra de arte',
+  'Muros TEM',
+  'Otro'
+];
+
 export const isLoadingActivity = act => {
   if (!act) return false;
   const a = String(act).toLowerCase();
   return a.includes('cargu') || a.includes('excav') || a.includes('escarpe');
+};
+
+export const isLoadingOnlyActivity = act => {
+  if (!act) return false;
+  const a = String(act).toLowerCase();
+  return (a.includes('cargu') || a.includes('traslado')) && !a.includes('extendido') && !a.includes('descarga');
 };
 
 export const isTransferActivity = act => {
@@ -101,10 +133,36 @@ export const isLayerActivity = act => {
   if ((a === 'carguío' || a === 'carguio' || a.includes('traslado')) && !a.includes('extendido')) {
     return false;
   }
-  if (a.includes('escarpe') || (a.includes('excav') && !a.includes('sello'))) {
+  // Cama de apoyo, tubos, obras civiles, escarpe y excavaciones no usan capa de compactación
+  if (a.includes('cama de apoyo') || a.includes('tubo') || a.includes('obras civiles') || a.includes('escarpe') || (a.includes('excav') && !a.includes('sello'))) {
     return false;
   }
   return true;
+};
+
+export const isDirectMeasurementActivity = (act, process = '') => {
+  if (!act) return false;
+  const a = String(act).toLowerCase();
+  if (a.includes('tubo') || a.includes('cama de apoyo') || a.includes('obras civiles')) {
+    return true;
+  }
+  const p = String(process).toLowerCase();
+  if (p.includes('cierre') || p.includes('pantalla') || p.includes('sumidero') || p.includes('cámara') || p.includes('camara') || p.includes('solera') || p.includes('moldaje') || p.includes('enfierradura') || p.includes('corte de asfalto')) {
+    return true;
+  }
+  return false;
+};
+
+export const getDefaultUnit = (act, process = '') => {
+  const a = String(act || '').toLowerCase();
+  const p = String(process || '').toLowerCase();
+  if (a.includes('tubo') || a.includes('cama de apoyo')) return 'ml';
+  if (p.includes('cierre') || p.includes('solera') || p.includes('corte de asfalto') || p.includes('pantalla')) return 'ml';
+  if (p.includes('sumidero') || p.includes('cámara') || p.includes('camara')) return 'un';
+  if (p.includes('moldaje')) return 'm²';
+  if (p.includes('enfierradura')) return 'kg';
+  if (p.includes('hormigonado')) return 'm³';
+  return 'm³';
 };
 
 export const pkNumber = pk => {

@@ -9,7 +9,9 @@ import {
   pkNumber, normalizePk, nameKey, toast, findAssignedActivity,
   projectDisplayName, normalizeProjectId, PROJECT_MATERIALS,
   TRANSFER_DESTINATIONS, TRANSFER_PURPOSES, isLoadingActivity,
-  isTransferActivity, isLayerActivity, formatActivityMeta, parseActivityMeta
+  isLoadingOnlyActivity, isTransferActivity, isLayerActivity,
+  isDirectMeasurementActivity, getDefaultUnit, CIVIL_WORKS_PROCESSES,
+  STANDARD_PROCESSES, formatActivityMeta, parseActivityMeta
 } from './utils.js';
 import {
   stateStore, selectedDay, allActivities, metadata, amount, capatazField,
@@ -117,13 +119,90 @@ export function updateActivityForm() {
     if (form.elements.transferPurpose) form.elements.transferPurpose.disabled = !showTransfer;
   }
 
-  // 3. Visibilidad de Capa (se oculta en carguío puro o traslado)
+  // 3. Visibilidad de Capa (se oculta en carguío puro, traslado, cama de apoyo, tubos, obras civiles)
   const layerSec = $('#layer-section');
   if (layerSec) {
     const showLayer = isLayerActivity(act);
     layerSec.hidden = !showLayer;
     if (form.elements.layerType) form.elements.layerType.disabled = !showLayer;
     if (form.elements.layer) form.elements.layer.disabled = !showLayer;
+  }
+
+  // 4. Control de calidad: En carguío no hay control de lab ni topo; en tubos y cama de apoyo exige topo obligatoriamente
+  const ctrlSec = $('#control-section');
+  const ctrlSelect = form.elements.requiredControls;
+  const ctrlHint = $('#control-hint');
+  const isPureLoading = isLoadingOnlyActivity(act);
+  const isPipeOrBedding = act.toLowerCase().includes('tubo') || act.toLowerCase().includes('cama de apoyo');
+
+  if (ctrlSec && ctrlSelect) {
+    if (isPureLoading) {
+      ctrlSec.hidden = true;
+      ctrlSelect.value = 'none';
+    } else if (isPipeOrBedding) {
+      ctrlSec.hidden = false;
+      ctrlSelect.value = 'top';
+      if (ctrlHint) ctrlHint.textContent = 'Obligatorio: Control topográfico de cotas y trazado (sin laboratorio).';
+    } else {
+      ctrlSec.hidden = false;
+      if (ctrlSelect.value === 'none' && !ctrlSelect.dataset.userTouched) {
+        ctrlSelect.value = 'both';
+      }
+      if (ctrlHint) ctrlHint.textContent = '';
+    }
+  }
+
+  // 5. Procesos según actividad (Obras Civiles vs Estándar)
+  const procSelect = form.elements.process;
+  const detailsEl = $('#activity-details');
+  if (procSelect) {
+    const isCivil = act === 'Obras civiles';
+    const targetProcesses = isCivil ? CIVIL_WORKS_PROCESSES : STANDARD_PROCESSES;
+    const currentVal = procSelect.value;
+    const isMismatch = isCivil ? !CIVIL_WORKS_PROCESSES.includes(currentVal) : !STANDARD_PROCESSES.includes(currentVal);
+
+    if (isMismatch || procSelect.dataset.lastMode !== (isCivil ? 'civil' : 'standard')) {
+      procSelect.dataset.lastMode = isCivil ? 'civil' : 'standard';
+      procSelect.innerHTML = targetProcesses.map(p => `<option value="${esc(p)}" ${p === currentVal ? 'selected' : ''}>${esc(p)}</option>`).join('');
+      if (!targetProcesses.includes(procSelect.value)) {
+        procSelect.value = targetProcesses[0];
+      }
+    }
+
+    if (isCivil && detailsEl) {
+      detailsEl.open = true;
+    }
+  }
+
+  // 6. Medición: Viajes de tolva vs Medición directa (tubos, obras civiles, etc.)
+  const isDirect = isDirectMeasurementActivity(act, procSelect?.value);
+  const tripsSec = $('#trips-section');
+  const directSec = $('#direct-quantity-section');
+  const dividerEl = $('#measurement-divider');
+  const unitSelect = form.elements.unit;
+
+  if (tripsSec && directSec) {
+    if (isDirect) {
+      tripsSec.style.display = 'none';
+      directSec.style.display = 'block';
+      if (dividerEl) dividerEl.textContent = 'Cantidad ejecutada (Medición directa)';
+      if (form.elements.trips) form.elements.trips.required = false;
+      if (form.elements.capacity) form.elements.capacity.required = false;
+      if (form.elements.quantity) form.elements.quantity.required = true;
+
+      const defUnit = getDefaultUnit(act, procSelect?.value);
+      if (unitSelect && (!unitSelect.dataset.userTouched || (unitSelect.value === 'm³' && defUnit !== 'm³'))) {
+        unitSelect.value = defUnit;
+      }
+    } else {
+      tripsSec.style.display = 'block';
+      directSec.style.display = 'none';
+      if (dividerEl) dividerEl.textContent = 'Cantidad ejecutada (Medición por viajes de tolva)';
+      if (form.elements.trips) form.elements.trips.required = true;
+      if (form.elements.capacity) form.elements.capacity.required = true;
+      if (form.elements.quantity) form.elements.quantity.required = false;
+      if (unitSelect) unitSelect.value = 'm³';
+    }
   }
 
   updateQuantityForm();
@@ -210,12 +289,12 @@ export function activityForm(dayId, activityId = '', preset = '') {
   }
 
   const defaultActivities = [
-    'Carguío', 'Carguío y traslado', 'Carguío y extendido',
+    'Carguío', 'Carguío y traslado',
     'Excavación', 'Escarpe',
     'Descarga', 'Descarga y extendido', 'Extendido', 'Extendido y compactado',
     'Compactación', 'Descarga, extendido y compactado',
     'Perfilado y compactación', 'Perfilado', 'Humectación',
-    'Instalación de tubos', 'Mejoramiento de sello', 'Cama de apoyo', 'Obras civiles'
+    'Instalación de tubos', 'Cama de apoyo', 'Obras civiles', 'Mejoramiento de sello'
   ];
   const activityList = [...defaultActivities];
   if (value.activity && !activityList.includes(value.activity)) {
@@ -238,9 +317,13 @@ export function activityForm(dayId, activityId = '', preset = '') {
     { value: 'none', label: 'Sin control (Registro completo)' }
   ];
 
+  const isCivil = value.activity === 'Obras civiles';
+  const processList = isCivil ? CIVIL_WORKS_PROCESSES : STANDARD_PROCESSES;
+  const initialProcess = value.process || (isCivil ? CIVIL_WORKS_PROCESSES[0] : STANDARD_PROCESSES[0]);
+
   const hasPrevious = !!(day.activities.find(act => !act.isAnnulled) || allActivities().find(act => !act.isAnnulled && !act.day.isDemo));
   const repeatBar = !a && hasPrevious ? `<div class="repeat-bar"><span class="repeat-text">¿Registrando lo mismo? Copia los datos anteriores.</span><button type="button" class="btn btn-repeat" data-action="repeat-previous" data-day-id="${esc(dayId)}">${icon('history')} Repetir anterior</button></div>` : '';
-  const openDetails = a && (value.cleanDesc || a.notes || a.process !== 'Movimiento de tierra');
+  const openDetails = isCivil || (a && (value.cleanDesc || a.notes || a.process !== 'Movimiento de tierra'));
 
   showDialog(
     a ? 'Editar avance' : 'Registrar avance',
@@ -280,16 +363,39 @@ export function activityForm(dayId, activityId = '', preset = '') {
       </div>
 
       ${select('stage', 'Estado de ejecución', ['Terminado', 'En curso'], value.stage || 'Terminado')}
-      ${select('requiredControls', 'Exigencia de control', requiredOptions, value.requiredControls || 'both')}
 
-      <div class="form-divider">Cantidad ejecutada (Medición por viajes de tolva)</div>
-      <div class="field full">
+      <div class="field" id="control-section">
+        ${select('requiredControls', 'Exigencia de control', requiredOptions, value.requiredControls || 'both')}
+        <span class="hint" id="control-hint"></span>
+      </div>
+
+      <div class="form-divider" id="measurement-divider">Cantidad ejecutada</div>
+
+      <!-- Medición por viajes de tolva (movimiento de tierras) -->
+      <div class="field full" id="trips-section">
         <div class="form-grid">
-          ${input('trips', 'Número de viajes', value.trips || '', 'type="number" min="0" max="100000" step="1" required')}
-          ${input('capacity', 'Capacidad por tolva (m³)', value.capacity || 22, 'type="number" min="0.1" max="1000" step="0.01" required')}
+          ${input('trips', 'Número de viajes', value.trips || '', 'type="number" min="0" max="100000" step="1"')}
+          ${input('capacity', 'Capacidad por tolva (m³)', value.capacity || 22, 'type="number" min="0.1" max="1000" step="0.01"')}
+        </div>
+        <div id="trip-total" class="computed"></div>
+      </div>
+
+      <!-- Medición directa (tubos, cama de apoyo, obras civiles, hormigón, etc.) -->
+      <div class="field full" id="direct-quantity-section" style="display:none">
+        <div class="form-grid">
+          ${input('quantity', 'Cantidad ejecutada', value.quantity || '', 'type="number" min="0" step="0.01" placeholder="Ej: 50"')}
+          <label class="field">
+            <span>Unidad de medida</span>
+            <select name="unit">
+              <option value="ml" ${value.unit === 'ml' ? 'selected' : ''}>ml (Metros lineales)</option>
+              <option value="m³" ${value.unit === 'm³' || !value.unit ? 'selected' : ''}>m³ (Metros cúbicos)</option>
+              <option value="un" ${value.unit === 'un' ? 'selected' : ''}>un (Unidades)</option>
+              <option value="m²" ${value.unit === 'm²' ? 'selected' : ''}>m² (Metros cuadrados)</option>
+              <option value="kg" ${value.unit === 'kg' ? 'selected' : ''}>kg (Kilogramos)</option>
+            </select>
+          </label>
         </div>
       </div>
-      <div id="trip-total" class="computed"></div>
 
       <label class="field full">
         <span>Fotos del avance</span>
@@ -297,10 +403,10 @@ export function activityForm(dayId, activityId = '', preset = '') {
         <span class="hint">Se guardan con esta jornada, sector, actividad, capa y PK. Máximo 12 MB por foto. ${a ? 'Las fotos anteriores se conservan.' : ''}</span>
       </label>
 
-      <details class="form-details" ${openDetails ? 'open' : ''}>
+      <details class="form-details" ${openDetails ? 'open' : ''} id="activity-details">
         <summary class="details-summary"><span>Observaciones y detalles opcionales</span></summary>
         <div class="form-grid" style="margin-top:14px">
-          ${select('process', 'Proceso', ['Movimiento de tierra', 'Relleno estructural', 'Terraplén', 'Subrasante', 'Base estabilizada', 'Bajo 4 pulgadas', 'Obra de arte', 'Muros TEM', 'Otro'], value.process)}
+          ${select('process', 'Proceso', processList, initialProcess)}
           ${textarea('description', 'Descripción para el informe / foto', value.cleanDesc || value.description || '')}
           ${textarea('notes', 'Observaciones o interferencias', value.notes || '')}
         </div>

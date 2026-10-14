@@ -8,7 +8,8 @@ import {
   layerLabel, activityStage, getActivityStatus, getControlStatus,
   requiredControlsLabel, findAssignedActivity, textarea,
   projectDisplayName, normalizeProjectId,
-  formatActivityMeta, parseActivityMeta, isLayerActivity, isLoadingActivity, isTransferActivity
+  formatActivityMeta, parseActivityMeta, isLayerActivity, isLoadingActivity,
+  isLoadingOnlyActivity, isTransferActivity, isDirectMeasurementActivity, getDefaultUnit
 } from './utils.js';
 
 import {
@@ -312,11 +313,31 @@ document.addEventListener('submit', async event => {
           if (pkNumber(pkEndVal) < pkNumber(pkStartVal)) throw new Error('El PK final no puede ser menor al inicial.');
         }
 
-        const tripsMode = true;
         const actId = form.dataset.activityId?.trim();
         const existing = actId ? day.activities.find(a => a.id === actId) : null;
-        const capacityVal = number('capacity') || 22;
-        const quantity = number('trips') * capacityVal;
+        const actVal = val('activity');
+        const processVal = val('process');
+        const isDirect = isDirectMeasurementActivity(actVal, processVal);
+
+        let tripsMode = !isDirect;
+        let quantity = 0;
+        let newUnit = 'm³';
+        let capacityVal = 0;
+        let tripsCount = 0;
+
+        if (isDirect) {
+          quantity = number('quantity') || 0;
+          newUnit = val('unit') || getDefaultUnit(actVal, processVal);
+          tripsMode = false;
+          tripsCount = 0;
+          capacityVal = 0;
+        } else {
+          tripsMode = true;
+          capacityVal = number('capacity') || 22;
+          tripsCount = number('trips') || 0;
+          quantity = tripsCount * capacityVal;
+          newUnit = 'm³';
+        }
 
         const photoIds = [...(existing?.photoIds || [])];
         form._uploadedPhotos ||= new Map();
@@ -326,13 +347,19 @@ document.addEventListener('submit', async event => {
           photoIds.push(form._uploadedPhotos.get(key));
         }
 
-        const actVal = val('activity');
         const needsLayer = isLayerActivity(actVal);
         const layerTypeVal = needsLayer ? (val('layerType') || 'terraplen_4') : '';
         const isCapa = needsLayer && ['terraplen_4', 'terraplen_6', 'relleno_estructural_3', 'relleno', 'marina'].includes(layerTypeVal);
         const newLayer = isCapa ? number('layer') : 0;
-        const newPkStart = pkStartVal, newPkEnd = pkEndVal, newUnit = 'm³', newSector = val('sector');
-        const reqCtrl = val('requiredControls') || 'both';
+        const newPkStart = pkStartVal, newPkEnd = pkEndVal, newSector = val('sector');
+
+        let reqCtrl = val('requiredControls') || 'both';
+        if (isLoadingOnlyActivity(actVal)) {
+          reqCtrl = 'none';
+        } else if (actVal.toLowerCase().includes('tubo') || actVal.toLowerCase().includes('cama de apoyo')) {
+          reqCtrl = 'top';
+        }
+
         const stageVal = val('stage') || 'Terminado';
 
         const materialVal = isLoadingActivity(actVal) ? val('material') : '';
@@ -348,6 +375,16 @@ document.addEventListener('submit', async event => {
             type: 'General',
             author: stateStore.state.settings.user || day.user,
             note: 'Registro de ejecución física completo. No requiere ensayos de laboratorio ni topografía.',
+            at: now(),
+            attachmentId: null
+          };
+        } else if (reqCtrl === 'top') {
+          initialControl = {
+            id: uid(),
+            status: 'Control pendiente',
+            type: 'General',
+            author: day.user,
+            note: 'Registro de ejecución física. Exige control topográfico obligatorio.',
             at: now(),
             attachmentId: null
           };
@@ -379,10 +416,10 @@ document.addEventListener('submit', async event => {
         }
 
         const record = {
-          id: existing ? existing.id : uid(), sector: newSector, activity: actVal, process: val('process'),
+          id: existing ? existing.id : uid(), sector: newSector, activity: actVal, process: processVal,
           layer: newLayer, layerType: layerTypeVal, pkStart: newPkStart, pkEnd: newPkEnd,
           requiredControls: reqCtrl, unit: newUnit, mode: tripsMode ? 'trips' : 'manual',
-          quantity, trips: tripsMode ? number('trips') : 0, capacity: number('capacity') || 22,
+          quantity, trips: tripsCount, capacity: capacityVal,
           stage: stageVal, description: formattedDesc, notes: val('notes'),
           createdAt: existing?.createdAt || now(), photoIds: [...new Set(photoIds)], controls,
           ...(existing?.isAnnulled ? { isAnnulled: existing.isAnnulled, annulReason: existing.annulReason, annulledAt: existing.annulledAt, annulledBy: existing.annulledBy } : {})
