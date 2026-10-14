@@ -120,9 +120,13 @@ document.addEventListener('click', async event => {
     if (action === 'reopen-day') {
       const { nextState, day } = editDay(id);
       day.closedAt = null;
+      const user = stateStore.state.settings.user || day.user;
+      const nowStr = new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+      const auditNote = `[Jornada reabierta ${nowStr} hrs por ${user}]`;
+      day.notes = day.notes ? `${day.notes}\n${auditNote}` : auditNote;
       await save(nextState);
       render();
-      toast('Jornada reabierta. Ya puedes registrar nuevos avances.');
+      toast('Jornada reabierta. Ya puedes registrar o corregir avances.');
       return;
     }
     if (action === 'report') { stateStore.selectedDayId = id; localStorage.setItem('clikium_selected_day_id', id); stateStore.view = 'report'; render(); return; }
@@ -134,7 +138,7 @@ document.addEventListener('click', async event => {
     }
     if (action === 'close-day') {
       const day = stateStore.state.days.find(d => d.id === id);
-      return showDialog('Cerrar jornada', `${day.activities.length} actividades · ${day.activities.filter(a => activityStage(a) === 'En curso').length} en curso · ${day.activities.filter(a => getActivityStatus(a) === 'Control pendiente').length} controles pendientes.`, `<p>El cierre bloquea la edición de avances y recursos. Los controles de laboratorio y topografía podrán agregarse después.</p><div class="form-grid">${textarea('notes', 'Observaciones finales', day.notes)}</div>`, { form: 'close', dayId: id });
+      return showDialog('Cerrar jornada', `${day.activities.length} actividades · ${day.activities.filter(a => activityStage(a) === 'En curso').length} en curso.`, `<p>El cierre registra el término de la jornada laboral. Si requieres corregir o registrar más avances después, podrás reabrirla registrando fecha y hora.</p><div class="form-grid">${textarea('notes', 'Observaciones finales', day.notes)}</div>`, { form: 'close', dayId: id });
     }
     if (action === 'demo') return await demo(render);
     if (action === 'delete-demo') {
