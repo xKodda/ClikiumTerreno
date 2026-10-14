@@ -1,4 +1,5 @@
 import { supabase } from './supabase.js';
+import { normalizeProjectId } from '../utils.js';
 
 export async function loadState() {
   const { data: { user } } = await supabase.auth.getUser();
@@ -173,104 +174,203 @@ export async function uploadMedia(file) {
 }
 
 export async function diffAndSave(oldState, newState) {
+  const { data: { user } } = await supabase.auth.getUser();
+  const userId = user?.id || null;
+
   for (const newDay of newState.days) {
-    const oldDay = oldState.days.find(d => d.id === newDay.id);
-    if (JSON.stringify(oldDay) === JSON.stringify(newDay)) continue;
+    if (newDay.isDemo) continue;
 
-    // Guardar Jornada
-    const { error: dayErr } = await supabase.from('days').upsert({
+    const oldDay = oldState?.days?.find(d => d.id === newDay.id);
+    const dayChanged = !oldDay || JSON.stringify(oldDay) !== JSON.stringify(newDay);
+    if (!dayChanged) continue;
+
+    const projectId = normalizeProjectId(newDay.project);
+
+    // 1. Guardar Jornada
+    const dayPayload = {
       id: newDay.id,
-      project_id: newDay.project,
-      foreman_name: newDay.user,
-      foreman_id: newDay.userId || null,
+      project_id: projectId,
+      foreman_name: newDay.user || 'Christofer Godoy',
+      foreman_id: newDay.userId || 'christofer_godoy',
       date: newDay.date,
-      started_at: newDay.startedAt,
-      closed_at: newDay.closedAt,
+      started_at: newDay.startedAt || new Date().toISOString(),
+      closed_at: newDay.closedAt || null,
       notes: newDay.notes || '',
-      is_demo: newDay.isDemo || false
-    });
-    if (dayErr) throw new Error("Error jornada: " + dayErr.message);
+      is_demo: false
+    };
+    if (userId) {
+      dayPayload.created_by = userId;
+    }
 
-    // Guardar Actividades
+    const { error: dayErr } = await supabase.from('days').upsert(dayPayload);
+    if (dayErr) {
+      console.error("Error upsert jornada:", dayErr, dayPayload);
+      throw new Error("Error jornada: " + dayErr.message);
+    }
+
+    // 2. Guardar Actividades
+    const { data: dbActivities } = await supabase
+      .from('activities')
+      .select('id, quantity, stage, is_annulled, notes, description')
+      .eq('day_id', newDay.id);
+
+    const dbActMap = new Map((dbActivities || []).map(a => [a.id, a]));
+
     for (const act of newDay.activities) {
-      const { error: actErr } = await supabase.from('activities').upsert({
+      const actPayload = {
         id: act.id,
         day_id: newDay.id,
         activity: act.activity,
         process: act.process,
         sector: act.sector,
-        stage: act.stage,
-        unit: act.unit,
-        required_controls: act.requiredControls,
+        stage: act.stage || 'Terminado',
+        unit: act.unit || 'm³',
+        required_controls: act.requiredControls || 'both',
         pk_start: act.pkStart || null,
         pk_end: act.pkEnd || null,
-        layer: act.layer || 0,
+        layer: Number(act.layer) || 0,
         layer_type: act.layerType || null,
-        quantity: act.quantity,
-        mode: act.mode,
-        trips: act.trips || 0,
-        capacity: act.capacity || 22,
+        quantity: Number(act.quantity) || 0,
+        mode: act.mode || 'trips',
+        trips: Number(act.trips) || 0,
+        capacity: Number(act.capacity) || 22,
         description: act.description || '',
         notes: act.notes || '',
-        is_annulled: act.isAnnulled || false,
+        is_annulled: Boolean(act.isAnnulled),
         annul_reason: act.annulReason || '',
-        annulled_at: act.annulledAt || null
-      });
-      if (actErr) throw new Error("Error actividad: " + actErr.message);
-
-      // Guardar Fotos vinculadas
-      if (act.photoIds && act.photoIds.length > 0) {
-        await supabase.from('activity_photos').delete().eq('activity_id', act.id);
-        const { error: pErr } = await supabase.from('activity_photos').insert(
-          act.photoIds.map((mediaId, idx) => ({
-            activity_id: act.id,
-            media_id: mediaId,
-            position: idx + 1
-          }))
-        );
-        if (pErr) console.warn("Error guardando relación foto:", pErr.message);
+        annulled_at: act.annulledAt || null,
+        created_at: act.createdAt || new Date().toISOString()
+      };
+      if (userId) {
+        actPayload.created_by = userId;
       }
 
-      // Guardar Controles
+      if (!dbActMap.has(act.id)) {
+        // ACTIVIDAD NUEVA: INSERCIÓN INDEPENDIENTE (NUNCA UPDATE)
+        const { error: actErr } = await supabase.from('activities').insert(actPayload);
+        if (actErr) {
+          console.error("Error insertando actividad:", actErr, actPayload);
+          throw new Error("Error actividad: " + actErr.message);
+        }
+      } else {
+        // ACTIVIDAD EXISTENTE: SOLO ACTUALIZAR SI HUBO CAMBIOS REALES
+        const old = dbActMap.get(act.id);
+        const changed = old.quantity !== actPayload.quantity ||
+                        old.stage !== actPayload.stage ||
+                        old.is_annulled !== actPayload.is_annulled ||
+                        old.notes !== actPayload.notes ||
+                        old.description !== actPayload.description;
+        if (changed) {
+          const { error: actErr } = await supabase
+            .from('activities')
+            .update({
+              quantity: actPayload.quantity,
+              trips: actPayload.trips,
+              stage: actPayload.stage,
+              notes: actPayload.notes,
+              description: actPayload.description,
+              is_annulled: actPayload.is_annulled,
+              annul_reason: actPayload.annul_reason,
+              annulled_at: actPayload.annulled_at
+            })
+            .eq('id', act.id);
+          if (actErr) {
+            console.error("Error actualizando actividad:", actErr);
+            throw new Error("Error actividad: " + actErr.message);
+          }
+        }
+      }
+
+      // 3. Guardar Fotos vinculadas
+      if (act.photoIds && act.photoIds.length > 0) {
+        try {
+          await supabase.from('activity_photos').delete().eq('activity_id', act.id);
+          const validPhotos = act.photoIds.filter(Boolean);
+          if (validPhotos.length > 0) {
+            const { error: pErr } = await supabase.from('activity_photos').insert(
+              validPhotos.map((mediaId, idx) => ({
+                activity_id: act.id,
+                media_id: mediaId,
+                position: idx + 1
+              }))
+            );
+            if (pErr) console.warn("Error guardando relación foto:", pErr.message);
+          }
+        } catch (photoErr) {
+          console.warn("Error en fotos:", photoErr);
+        }
+      }
+
+      // 4. Guardar Controles
+      // IMPORTANTE: En Supabase los controles son append-only.
+      // ignoreDuplicates: true ejecuta ON CONFLICT DO NOTHING, previniendo
+      // que se intente un UPDATE que dispare el trigger trg_controls_append_only.
       if (act.controls && act.controls.length > 0) {
-        const { error: cErr } = await supabase.from('controls').upsert(
-          act.controls.map(ctrl => ({
+        const ctrlPayloads = act.controls.map(ctrl => {
+          const cp = {
             id: ctrl.id,
             activity_id: act.id,
-            type: ctrl.type,
-            status: ctrl.status,
-            author: ctrl.author,
+            type: ctrl.type || 'General',
+            status: ctrl.status || 'Control pendiente',
+            author: ctrl.author || newDay.user || 'Christofer Godoy',
             note: ctrl.note || '',
-            at: ctrl.at,
+            at: ctrl.at || new Date().toISOString(),
             attachment_id: ctrl.attachmentId || null
-          }))
-        );
-        if (cErr) throw new Error("Error control: " + cErr.message);
+          };
+          if (userId) cp.created_by = userId;
+          return cp;
+        });
+
+        const { error: cErr } = await supabase.from('controls').upsert(ctrlPayloads, {
+          onConflict: 'id',
+          ignoreDuplicates: true
+        });
+        if (cErr) {
+          console.error("Error upsert controls:", cErr, ctrlPayloads);
+          throw new Error("Error control: " + cErr.message);
+        }
       }
     }
 
-    // Guardar Personal (limpiar y reinsertar)
-    await supabase.from('crew_entries').delete().eq('day_id', newDay.id);
-    if (newDay.crew && newDay.crew.length > 0) {
-      const { error: crErr } = await supabase.from('crew_entries').insert(
-        newDay.crew.map(c => ({
-          id: c.id, day_id: newDay.id, name: c.name, role: c.role,
-          assignment: c.assignment || '', hours: c.hours, extra: c.extra || 0
-        }))
-      );
-      if (crErr) throw new Error("Error personal: " + crErr.message);
+    // 5. Guardar Personal (limpiar y reinsertar con deduplicación por nombre)
+    try {
+      await supabase.from('crew_entries').delete().eq('day_id', newDay.id);
+      if (newDay.crew && newDay.crew.length > 0) {
+        const seenCrew = new Set();
+        const uniqueCrew = [];
+        for (const c of newDay.crew) {
+          const k = (c.name || '').trim().toLowerCase();
+          if (!seenCrew.has(k)) {
+            seenCrew.add(k);
+            uniqueCrew.push(c);
+          }
+        }
+        const { error: crErr } = await supabase.from('crew_entries').insert(
+          uniqueCrew.map(c => ({
+            id: c.id, day_id: newDay.id, name: c.name, role: c.role || 'M1',
+            assignment: c.assignment || '', hours: Number(c.hours) || 0, extra: Number(c.extra) || 0
+          }))
+        );
+        if (crErr) console.warn("Error guardando personal:", crErr.message);
+      }
+    } catch (crewErr) {
+      console.warn("Excepción personal:", crewErr);
     }
 
-    // Guardar Maquinaria
-    await supabase.from('machine_entries').delete().eq('day_id', newDay.id);
-    if (newDay.machines && newDay.machines.length > 0) {
-      const { error: mErr } = await supabase.from('machine_entries').insert(
-        newDay.machines.map(m => ({
-          id: m.id, day_id: newDay.id, name: m.name, operator: m.operator || '',
-          assignment: m.assignment || '', hours: m.hours, standby: m.standby || 0
-        }))
-      );
-      if (mErr) throw new Error("Error máquina: " + mErr.message);
+    // 6. Guardar Maquinaria
+    try {
+      await supabase.from('machine_entries').delete().eq('day_id', newDay.id);
+      if (newDay.machines && newDay.machines.length > 0) {
+        const { error: mErr } = await supabase.from('machine_entries').insert(
+          newDay.machines.map(m => ({
+            id: m.id, day_id: newDay.id, name: m.name, operator: m.operator || '',
+            assignment: m.assignment || '', hours: Number(m.hours) || 0, standby: Number(m.standby) || 0
+          }))
+        );
+        if (mErr) console.warn("Error guardando maquinaria:", mErr.message);
+      }
+    } catch (machErr) {
+      console.warn("Excepción maquinaria:", machErr);
     }
   }
 }

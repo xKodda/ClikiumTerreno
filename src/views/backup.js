@@ -2,7 +2,7 @@
 // CLIKIUM TERRENO — VISTA: CONFIGURACIÓN Y SINCRONIZACIÓN CLOUD v3.0
 // ============================================================================
 
-import { input, icon, esc, toast } from '../utils.js';
+import { input, icon, esc, toast, projectDisplayName } from '../utils.js';
 import { stateStore, capatazField } from '../state.js';
 
 export function renderBackup() {
@@ -10,6 +10,7 @@ export function renderBackup() {
   const daysCount = stateStore.state?.days?.length || 0;
   const mediaCount = stateStore.media?.length || 0;
   const savedPhone = localStorage.getItem('clikium_phone_matias_ramos') || '';
+  const isPending = !!stateStore.pendingSyncState;
 
   return `<div class="heading">
     <div>
@@ -18,6 +19,14 @@ export function renderBackup() {
       <p>Sincronización directa con Supabase y destinatarios de informes de terreno.</p>
     </div>
   </div>
+  ${isPending ? `
+    <div style="background:#fffbeb;border:1px solid #fde68a;padding:14px 18px;border-radius:10px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <div style="font-size:0.88rem;color:#92400e;line-height:1.4">
+        ⚠️ <strong>Tienes cambios guardados en este dispositivo pendientes de sincronizar con Supabase.</strong>
+        <br><span style="font-size:0.8rem;color:#b45309">Se guardaron de forma segura en la memoria de tu teléfono.</span>
+      </div>
+      <button class="btn btn-sm btn-retry" data-action="retry-sync" style="background:#f59e0b;color:white;padding:8px 14px;border-radius:8px">Sincronizar ahora</button>
+    </div>` : ''}
   <div class="backup-grid">
     <section class="panel">
       <h2>Equipo de terreno y destinatario</h2>
@@ -25,7 +34,7 @@ export function renderBackup() {
         <div class="form-grid">
           <label class="field">
             <span>Proyecto activo</span>
-            <input type="text" value="${esc(s.project || 'Túnel Lo Ruiz')}" readonly>
+            <input type="text" value="${esc(projectDisplayName(s.project))}" readonly>
           </label>
           ${capatazField()}
           <label class="field">
@@ -51,7 +60,7 @@ export function renderBackup() {
       <div style="background:#f8fafc;border:1px solid #e2e8f0;padding:16px;border-radius:8px;margin-bottom:18px">
         <div style="display:flex;justify-content:space-between;margin-bottom:8px">
           <span>Estado del servidor:</span>
-          <strong style="color:#16a34a">● Conectado a la nube</strong>
+          <strong style="color:${isPending ? '#d97706' : '#16a34a'}">${isPending ? '⚠️ Pendiente de sincronizar' : '● Conectado a la nube'}</strong>
         </div>
         <div style="display:flex;justify-content:space-between;margin-bottom:8px">
           <span>Jornadas en la nube:</span>

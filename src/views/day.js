@@ -50,7 +50,19 @@ export function activityCard(a, day) {
 export function renderDay() {
   const day = selectedDay();
   if (!day) {
-    return `<div class="heading"><div><div class="eyebrow">${esc(stateStore.state?.settings?.project || 'PROYECTO')} · TERRENO</div><h1>Jornada de hoy</h1><p>${esc(dateLabel(today()))}</p></div></div><div class="empty empty-start"><div class="empty-icon">${icon('day')}</div><h2>Comencemos la jornada.</h2><p>Inicia el día para registrar actividades, fotos y controles del proyecto.</p><button class="btn btn-accent" data-action="start-day">${icon('plus')}Iniciar jornada</button><button class="text-button sample-link" data-action="demo">Ver una jornada de ejemplo</button></div>`;
+    return `<div class="heading day-heading">
+      <div class="day-heading-info">
+        <span class="day-date-text">${esc(dateLabel(today()))}</span>
+        <h1 class="day-title">Jornada de hoy</h1>
+      </div>
+    </div>
+    <div class="empty empty-start">
+      <div class="empty-icon">${icon('day')}</div>
+      <h2>Comencemos la jornada.</h2>
+      <p>Inicia el día para registrar actividades, fotos y controles del proyecto.</p>
+      <button class="btn btn-accent" data-action="start-day">${icon('plus')}Iniciar jornada</button>
+      <button class="text-button sample-link" data-action="demo">Ver una jornada de ejemplo</button>
+    </div>`;
   }
   const activities = day.activities;
   const activeActivities = activities.filter(a => !a.isAnnulled);
@@ -69,15 +81,25 @@ export function renderDay() {
   const hh = day.crew.reduce((n, p) => n + p.hours + p.extra, 0);
   const photos = activities.reduce((n, a) => n + a.photoIds.length, 0);
 
-  return `<div class="heading">
-    <div>
-      <div class="eyebrow">${esc(day.project)} · ${day.closedAt ? 'JORNADA CERRADA' : 'JORNADA ABIERTA'}</div>
-      <h1>${day.date === today() ? 'Jornada de hoy' : 'Jornada de terreno'}</h1>
-      <p>${esc(dateLabel(day.date))} · ${esc(day.user)}</p>
+  const isClosed = Boolean(day.closedAt);
+  const statusPill = isClosed
+    ? `<span class="day-status-pill status-closed">● Cerrada</span>`
+    : `<span class="day-status-pill status-open">● En curso</span>`;
+
+  return `<div class="heading day-heading">
+    <div class="day-heading-info">
+      <div class="day-status-bar">
+        ${statusPill}
+        <span class="day-date-text">${esc(dateLabel(day.date))}</span>
+      </div>
+      <h1 class="day-title">${day.date === today() ? 'Jornada de hoy' : 'Jornada de terreno'}</h1>
     </div>
     <div class="heading-actions">
       <button class="btn btn-secondary" data-action="report" data-id="${day.id}">${icon('report')}Informe diario</button>
-      ${!day.closedAt ? primary('add-activity', 'Registrar avance', day.id) : `<button class="btn btn-secondary" data-action="start-day">Nueva jornada</button>`}
+      ${!day.closedAt 
+        ? primary('add-activity', '+ Registrar avance', day.id) 
+        : `<button class="btn btn-primary btn-reopen" data-action="reopen-day" data-id="${day.id}">🔓 Reabrir jornada</button>`
+      }
     </div>
   </div>
   ${day.isDemo ? '<div class="notice">Jornada de ejemplo. Estos registros son demostrativos y no corresponden a producción real. Puedes iniciar tu propia jornada desde Respaldo. <button class="btn btn-sm btn-secondary" data-action="delete-demo" style="margin-left:12px">Eliminar jornada de ejemplo</button></div>' : ''}
@@ -98,7 +120,7 @@ export function renderDay() {
   <div class="activity-layout">
     <section>
       <div class="section-head"><h2>Avances del día</h2><span class="muted">${photos} fotos adjuntas</span></div>
-      <div class="activity-list">${activities.length ? activities.map(a => activityCard(a, day)).join('') : empty('Tu primer avance', 'Registra lo que está pasando en terreno. Puedes dejar la ejecución en curso.', !day.closedAt ? primary('add-activity', 'Registrar avance', day.id) : '')}</div>
+      <div class="activity-list">${activities.length ? activities.map(a => activityCard(a, day)).join('') : empty('Tu primer avance', 'Registra lo que está pasando en terreno. Puedes dejar la ejecución en curso.', !day.closedAt ? primary('add-activity', 'Registrar avance', day.id) : `<button class="btn btn-primary btn-reopen" data-action="reopen-day" data-id="${day.id}">🔓 Reabrir jornada para registrar</button>`)}</div>
     </section>
     <aside class="side-panel">
       <h3>${day.closedAt ? 'Registro de la jornada' : 'Registro rápido'}</h3>

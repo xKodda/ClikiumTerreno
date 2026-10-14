@@ -2,15 +2,20 @@
 // CLIKIUM TERRENO — ESTADO GLOBAL Y SINCRONIZACIÓN (ES MODULE)
 // ============================================================================
 
-import { $, esc, nameKey, today, toast, option } from './utils.js';
+import { $, esc, nameKey, today, toast, option, normalizeProjectId } from './utils.js';
+
+export const LOCAL_CACHE_KEY = 'clikium_terreno_state_cache';
+export const PENDING_SYNC_KEY = 'clikium_terreno_pending_state';
+export const SELECTED_DAY_KEY = 'clikium_selected_day_id';
 
 export const stateStore = {
   state: null,
+  remoteState: null,
   version: 0,
   media: [],
   catalog: { capataces: [], sectores: [] },
   view: 'today',
-  selectedDayId: null,
+  selectedDayId: typeof localStorage !== 'undefined' ? (localStorage.getItem(SELECTED_DAY_KEY) || null) : null,
   historySearch: '',
   historyMonth: '',
   mapSector: 'Eje 48',
@@ -23,6 +28,76 @@ export const stateStore = {
   saving: false
 };
 
+export function persistLocalState(state) {
+  if (!state) return;
+  try {
+    localStorage.setItem(LOCAL_CACHE_KEY, JSON.stringify(state));
+  } catch (e) {
+    console.warn("Error guardando caché local:", e);
+  }
+}
+
+export function mergePendingWithRemote(remoteState, pendingState) {
+  if (!remoteState) return pendingState;
+  if (!pendingState) return remoteState;
+
+  const resultState = structuredClone(remoteState);
+  resultState.settings = { ...remoteState.settings, ...pendingState.settings };
+  
+  const remoteDays = resultState.days || [];
+  const pendingDays = pendingState.days || [];
+
+  for (const pDay of pendingDays) {
+    const existingIndex = remoteDays.findIndex(d => d.id === pDay.id);
+    if (existingIndex === -1) {
+      remoteDays.unshift(structuredClone(pDay));
+    } else {
+      const rDay = remoteDays[existingIndex];
+      if (pDay.notes && !rDay.notes) rDay.notes = pDay.notes;
+      if (pDay.closedAt && !rDay.closedAt) rDay.closedAt = pDay.closedAt;
+
+      const rActivities = rDay.activities || [];
+      const pActivities = pDay.activities || [];
+      for (const pAct of pActivities) {
+        const actIndex = rActivities.findIndex(a => a.id === pAct.id);
+        if (actIndex === -1) {
+          rActivities.push(structuredClone(pAct));
+        } else {
+          const rAct = rActivities[actIndex];
+          const rCtrlIds = new Set((rAct.controls || []).map(c => c.id));
+          for (const c of pAct.controls || []) {
+            if (!rCtrlIds.has(c.id)) {
+              rAct.controls.push(structuredClone(c));
+              rCtrlIds.add(c.id);
+            }
+          }
+          const allPhotos = new Set([...(rAct.photoIds || []), ...(pAct.photoIds || [])]);
+          rAct.photoIds = Array.from(allPhotos);
+          rAct.quantity = pAct.quantity;
+          rAct.trips = pAct.trips;
+          rAct.stage = pAct.stage;
+          if (pAct.isAnnulled) {
+            rAct.isAnnulled = true;
+            rAct.annulReason = pAct.annulReason;
+            rAct.annulledAt = pAct.annulledAt;
+          }
+        }
+      }
+      rDay.activities = rActivities;
+
+      if (pDay.crew && pDay.crew.length > 0) {
+        rDay.crew = structuredClone(pDay.crew);
+      }
+      if (pDay.machines && pDay.machines.length > 0) {
+        rDay.machines = structuredClone(pDay.machines);
+      }
+    }
+  }
+
+  resultState.days = remoteDays;
+  return resultState;
+}
+
 export const foremanId = day => day.userId || stateStore.catalog.capataces.find(p => nameKey(p.nombre) === nameKey(day.user))?.id || '';
 
 export const allActivities = () => (stateStore.state?.days || []).flatMap(day => day.activities.map(a => ({ ...a, day })));
@@ -34,9 +109,14 @@ export const selectedDay = () => {
     const found = days.find(d => d.id === stateStore.selectedDayId);
     if (found) return found;
   }
-  const openDays = days.filter(d => !d.isDemo && !d.closedAt && (s.userId ? foremanId(d) === s.userId : d.user === s.user) && d.project === s.project);
+  const sProj = normalizeProjectId(s.project);
+  const openDays = days.filter(d => !d.isDemo && !d.closedAt && (s.userId ? foremanId(d) === s.userId : nameKey(d.user) === nameKey(s.user)) && normalizeProjectId(d.project) === sProj);
   if (openDays.length) return openDays.sort((a, b) => b.date.localeCompare(a.date) || (b.startedAt || '').localeCompare(a.startedAt || ''))[0];
-  const todayDay = days.find(d => d.date === today() && (s.userId ? foremanId(d) === s.userId : d.user === s.user) && d.project === s.project && !d.isDemo);
+  
+  const anyOpen = days.filter(d => !d.isDemo && !d.closedAt);
+  if (anyOpen.length) return anyOpen.sort((a, b) => b.date.localeCompare(a.date) || (b.startedAt || '').localeCompare(a.startedAt || ''))[0];
+
+  const todayDay = days.find(d => d.date === today() && (s.userId ? foremanId(d) === s.userId : nameKey(d.user) === nameKey(s.user)) && normalizeProjectId(d.project) === sProj && !d.isDemo);
   if (todayDay) return todayDay;
   const sorted = [...days].filter(d => !d.isDemo).sort((a, b) => b.date.localeCompare(a.date));
   return sorted[0];
@@ -68,14 +148,18 @@ export function updateSaveStatus(status, customHtml = null) {
   el.className = 'save-status';
   if (status === 'saving') {
     el.classList.add('status-saving');
-    el.innerHTML = 'Guardando…';
+    el.innerHTML = '🔄 Guardando…';
   } else if (status === 'pending') {
     el.classList.add('status-pending');
-    el.innerHTML = customHtml || `⚠️ Pendiente de enviar <button class="btn btn-sm btn-retry" data-action="retry-sync">Reintentar</button>`;
+    el.innerHTML = customHtml || `⚠️ Pendiente <button class="btn btn-sm btn-retry" data-action="retry-sync">Reintentar</button>`;
   } else if (status === 'saved') {
     el.classList.add('status-saved');
-    el.innerHTML = 'Sincronizado';
+    el.innerHTML = '● Sincronizado';
+  } else if (status === 'offline') {
+    el.classList.add('status-offline');
+    el.innerHTML = customHtml || '⚡ Copia local';
   } else {
+    el.classList.add('status-error');
     el.innerHTML = customHtml || 'Sin conexión';
   }
 }
@@ -88,21 +172,32 @@ export function editDay(dayId) {
 }
 
 export async function save(nextState) {
-  if (stateStore.saving) return;
+  stateStore.state = nextState;
+  persistLocalState(nextState);
+
+  if (stateStore.saving) {
+    stateStore.pendingSyncState = { state: nextState, at: new Date().toISOString() };
+    try { localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify(stateStore.pendingSyncState)); } catch (e) {}
+    updateSaveStatus('pending');
+    return;
+  }
+
   stateStore.saving = true;
   updateSaveStatus('saving');
   try {
-    await diffAndSave(stateStore.state, nextState);
-    stateStore.state = nextState;
+    const baseState = stateStore.remoteState || { days: [] };
+    await diffAndSave(baseState, nextState);
+    stateStore.remoteState = structuredClone(nextState);
     stateStore.pendingSyncState = null;
-    localStorage.removeItem('clikium_terreno_pending_state');
+    localStorage.removeItem(PENDING_SYNC_KEY);
+    persistLocalState(nextState);
     updateSaveStatus('saved');
   } catch (error) {
-    stateStore.state = nextState;
+    console.error("Error al sincronizar con Supabase:", error);
     stateStore.pendingSyncState = { state: nextState, at: new Date().toISOString() };
-    localStorage.setItem('clikium_terreno_pending_state', JSON.stringify(stateStore.pendingSyncState));
+    try { localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify(stateStore.pendingSyncState)); } catch (e) {}
     updateSaveStatus('pending');
-    toast('Sin conexión: guardado como borrador local.');
+    toast('Guardado en teléfono. Pendiente de sincronizar.');
   } finally {
     stateStore.saving = false;
   }
@@ -112,15 +207,20 @@ export async function retrySync(onSuccessRender = () => {}) {
   if (!stateStore.pendingSyncState || stateStore.saving) return;
   updateSaveStatus('saving');
   try {
-    await diffAndSave(stateStore.state, stateStore.pendingSyncState.state);
+    const targetState = stateStore.pendingSyncState.state || stateStore.state;
+    const baseState = stateStore.remoteState || { days: [] };
+    await diffAndSave(baseState, targetState);
+    stateStore.remoteState = structuredClone(targetState);
     stateStore.pendingSyncState = null;
-    localStorage.removeItem('clikium_terreno_pending_state');
+    localStorage.removeItem(PENDING_SYNC_KEY);
+    persistLocalState(stateStore.state);
     updateSaveStatus('saved');
     toast('Cambios pendientes sincronizados correctamente.');
     onSuccessRender();
   } catch (error) {
+    console.error("Error en retrySync:", error);
     updateSaveStatus('pending');
-    toast('No se pudo sincronizar: ' + error.message);
+    toast('Pendiente: ' + (error.message || 'Sin conexión'));
   }
 }
 

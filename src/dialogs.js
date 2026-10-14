@@ -6,7 +6,8 @@ import {
   $, esc, num, stamp, today, now, uid, dateLabel, icon, input, select,
   textarea, statusClass, badge, controlBadges, layerLabel, activityLabel,
   activityStage, getActivityStatus, requiredControlsLabel, sectorUsesPk,
-  pkNumber, normalizePk, nameKey, toast, findAssignedActivity
+  pkNumber, normalizePk, nameKey, toast, findAssignedActivity,
+  projectDisplayName, normalizeProjectId
 } from './utils.js';
 import {
   stateStore, selectedDay, allActivities, metadata, amount, capatazField,
@@ -31,7 +32,9 @@ export function showDialog(title, subtitle, body, { form = '', dayId = '', activ
 
 export function startForm() {
   const s = stateStore.state?.settings || {};
-  showDialog('Iniciar jornada', 'La jornada queda asociada a fecha, capataz y proyecto.', `<div class="form-grid">${input('date', 'Fecha', today(), 'type="date" required')}${capatazField()}${input('project', 'Proyecto', s.project || '', 'required maxlength="150"')}</div>`, { form: 'start' });
+  const projDisplay = projectDisplayName(s.project);
+  const projId = normalizeProjectId(s.project);
+  showDialog('Iniciar jornada', 'La jornada queda asociada a fecha, capataz y proyecto.', `<div class="form-grid">${input('date', 'Fecha', today(), 'type="date" required')}${capatazField()}<label class="field"><span>Proyecto</span><input type="text" value="${esc(projDisplay)}" readonly style="background:#f8fafc;font-weight:600;color:#1e293b"><input type="hidden" name="project" value="${esc(projId)}"></label></div>`, { form: 'start' });
 }
 
 export function updateQuantityForm() {

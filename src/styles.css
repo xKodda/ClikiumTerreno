@@ -56,10 +56,13 @@ body.unauthenticated .sidebar,body.unauthenticated .topbar{display:none!importan
 .multi-select-item .item-info strong{font-size:.88rem}
 .multi-select-item .item-info span{font-size:.76rem;color:var(--muted)}
 /* Estado de guardado y reintento sin conexión */
-.status-pending{color:#b45309;font-weight:600}
-.status-saved{color:#15803d}
-.status-saving{color:#1d4ed8}
-.btn-retry{background:#f59e0b;color:white;border:none;border-radius:5px;padding:3px 9px;font-size:.78rem;font-weight:700;margin-left:6px;cursor:pointer}
+.save-status{display:inline-flex;align-items:center;gap:6px;font-size:.76rem;font-weight:600;padding:4px 10px;border-radius:9999px;background:#f1f5f9;color:#64748b;transition:all .2s ease}
+.save-status.status-pending{background:#fef3c7;color:#b45309;font-weight:600}
+.save-status.status-saved{background:#dcfce7;color:#15803d}
+.save-status.status-saving{background:#dbeafe;color:#1d4ed8}
+.save-status.status-offline{background:#f1f5f9;color:#475569}
+.save-status.status-error{background:#fee2e2;color:#b91c1c}
+.btn-retry{background:#f59e0b;color:white;border:none;border-radius:5px;padding:3px 9px;font-size:.74rem;font-weight:700;margin-left:6px;cursor:pointer}
 .btn-retry:hover{background:#d97706}
 .btn-sm{min-height:34px;padding:6px 12px;font-size:.82rem}
 .nav-badge{background:#e11d48;color:white;border-radius:10px;padding:2px 7px;font-size:.72rem;font-weight:700;margin-left:4px}
@@ -149,10 +152,66 @@ dialog#modal::backdrop {
   color: #16a34a !important;
 }
 
+/* Day heading limpio y minimalista */
+.day-heading {
+  margin-bottom: 22px;
+}
+.day-heading-info {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.day-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.day-status-pill {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 3px 8px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+}
+.day-status-pill.status-open {
+  background: #dcfce7;
+  color: #15803d;
+}
+.day-status-pill.status-closed {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.day-date-text {
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-weight: 500;
+}
+.day-title {
+  font-size: 1.85rem;
+  margin: 0;
+  line-height: 1.15;
+}
+.btn-reopen {
+  background: #0284c7 !important;
+  color: white !important;
+  border: none !important;
+}
+.btn-reopen:hover {
+  background: #0369a1 !important;
+}
+
 /* ==========================================================================
    OPTIMIZACIONES EXCLUSIVAS PARA MÓVIL (TERRENO / FAENA)
    ========================================================================== */
 @media (max-width: 800px) {
+  /* Ocultar repetición de fecha en el topbar en pantalla móvil */
+  #header-date {
+    display: none !important;
+  }
+
   /* Barra inferior fija con soporte para notch y barra gestual iOS/Android */
   .sidebar {
     height: calc(62px + env(safe-area-inset-bottom, 0px)) !important;
@@ -174,29 +233,73 @@ dialog#modal::backdrop {
   main {
     padding-left: 14px !important;
     padding-right: 14px !important;
+    padding-top: 16px !important;
     padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important;
   }
 
   /* Topbar adaptada a pantallas angostas con notch */
   .topbar {
-    height: calc(64px + env(safe-area-inset-top, 0px)) !important;
+    height: calc(54px + env(safe-area-inset-top, 0px)) !important;
     padding-top: env(safe-area-inset-top, 0px) !important;
     padding-left: 14px !important;
     padding-right: 14px !important;
     gap: 8px !important;
   }
   .topbar-title {
-    font-size: 0.68rem !important;
+    font-size: 0.72rem !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.05rem !important;
     min-width: 0 !important;
     overflow: hidden !important;
     text-overflow: ellipsis !important;
-  }
-  .topbar-title span {
-    font-size: 0.78rem !important;
+    white-space: nowrap !important;
   }
   .topbar-actions {
     gap: 6px !important;
     flex-shrink: 0 !important;
+  }
+
+  /* Day heading ultra minimalista en móvil */
+  .day-heading {
+    margin-bottom: 14px !important;
+  }
+  .day-title {
+    font-size: 1.45rem !important;
+  }
+  .day-status-bar {
+    gap: 8px !important;
+  }
+  .day-date-text {
+    font-size: 0.78rem !important;
+  }
+  .heading-actions {
+    width: 100% !important;
+    margin-top: 8px !important;
+    gap: 8px !important;
+  }
+  .heading-actions .btn {
+    flex: 1 !important;
+    min-height: 44px !important;
+    font-size: 0.88rem !important;
+  }
+
+  /* Stats grid compacto y limpio */
+  .stats {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+    margin-bottom: 18px !important;
+  }
+  .stat {
+    min-height: 102px !important;
+    padding: 12px 14px !important;
+    border-radius: 8px !important;
+  }
+  .stat-label {
+    font-size: 0.74rem !important;
+    margin-bottom: 6px !important;
+  }
+  .stat-value {
+    font-size: 1.55rem !important;
   }
 
   /* User pill compacto en celular */

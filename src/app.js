@@ -6,12 +6,14 @@ import {
   $, esc, num, uid, now, today, dateLabel, timeOnly, icon, toast,
   sectorUsesPk, pkNumber, normalizePk, nameKey, statusClass, badge, controlBadges,
   layerLabel, activityStage, getActivityStatus, getControlStatus,
-  requiredControlsLabel, findAssignedActivity, textarea
+  requiredControlsLabel, findAssignedActivity, textarea,
+  projectDisplayName, normalizeProjectId
 } from './utils.js';
 
 import {
   stateStore, selectedDay, allActivities, foremanId, amount, metadata,
-  save, editDay, updateSaveStatus, retrySync, upload
+  save, editDay, updateSaveStatus, retrySync, upload,
+  persistLocalState, mergePendingWithRemote
 } from './state.js';
 
 import {
@@ -33,7 +35,7 @@ import { renderBackup } from './views/backup.js';
 // ----------------------------------------------------------------------------
 export function render() {
   document.body.classList.toggle('report-mode', stateStore.view === 'report');
-  $('#project-name').textContent = stateStore.state?.settings?.project || 'Túnel Lo Ruiz';
+  $('#project-name').textContent = projectDisplayName(stateStore.state?.settings?.project);
   $('#header-date').textContent = dateLabel(today());
 
   const userEl = $('#user-display-name');
@@ -114,8 +116,16 @@ document.addEventListener('click', async event => {
     if (action === 'edit-person') return resourceForm(dayId, 'person', id);
     if (action === 'add-machine') return resourceForm(id, 'machine');
     if (action === 'edit-machine') return resourceForm(dayId, 'machine', id);
-    if (action === 'open-day') { stateStore.selectedDayId = id; stateStore.pendingScope = 'today'; stateStore.view = 'today'; render(); return; }
-    if (action === 'report') { stateStore.selectedDayId = id; stateStore.view = 'report'; render(); return; }
+    if (action === 'open-day') { stateStore.selectedDayId = id; localStorage.setItem('clikium_selected_day_id', id); stateStore.pendingScope = 'today'; stateStore.view = 'today'; render(); return; }
+    if (action === 'reopen-day') {
+      const { nextState, day } = editDay(id);
+      day.closedAt = null;
+      await save(nextState);
+      render();
+      toast('Jornada reabierta. Ya puedes registrar nuevos avances.');
+      return;
+    }
+    if (action === 'report') { stateStore.selectedDayId = id; localStorage.setItem('clikium_selected_day_id', id); stateStore.view = 'report'; render(); return; }
     if (action === 'print') { await Promise.all([...document.images].map(i => i.decode().catch(() => {}))); return window.print(); }
     if (action === 'clear-history') { stateStore.historySearch = ''; stateStore.historyMonth = ''; render(); return; }
     if (action === 'day-notes') {
@@ -130,8 +140,9 @@ document.addEventListener('click', async event => {
     if (action === 'delete-demo') {
       const nextState = structuredClone(stateStore.state);
       nextState.days = nextState.days.filter(d => !d.isDemo);
-      await save(nextState);
       stateStore.selectedDayId = null;
+      localStorage.removeItem('clikium_selected_day_id');
+      await save(nextState);
       stateStore.view = 'today';
       render();
       toast('Jornada de ejemplo eliminada.');
@@ -255,17 +266,20 @@ document.addEventListener('submit', async event => {
   try {
     const type = form.dataset.form;
     if (type === 'start') {
-      const nextState = structuredClone(stateStore.state);
+      const nextState = structuredClone(stateStore.state || { settings: {}, days: [] });
+      if (!nextState.days) nextState.days = [];
       const id = uid();
       const capataz = stateStore.catalog.capataces.find(p => p.id === val('userId'));
       if (!capataz) throw new Error('Selecciona un capataz registrado.');
-      nextState.settings = { ...nextState.settings, project: val('project'), user: capataz.nombre, userId: capataz.id };
+      const projId = normalizeProjectId(val('project')) || 'tunel_lo_ruiz';
+      nextState.settings = { ...nextState.settings, project: projId, user: capataz.nombre, userId: capataz.id };
       nextState.days.push({
-        id, date: val('date'), project: val('project'), user: capataz.nombre, userId: capataz.id,
+        id, date: val('date'), project: projId, user: capataz.nombre, userId: capataz.id,
         isDemo: false, startedAt: now(), closedAt: null, notes: '', activities: [], crew: [], machines: []
       });
-      await save(nextState);
       stateStore.selectedDayId = id;
+      localStorage.setItem('clikium_selected_day_id', id);
+      await save(nextState);
       stateStore.pendingScope = 'today';
       stateStore.view = 'today';
     } else if (type === 'settings') {
@@ -289,7 +303,8 @@ document.addEventListener('submit', async event => {
         }
 
         const tripsMode = true;
-        const existing = day.activities.find(a => a.id === form.dataset.activityId);
+        const actId = form.dataset.activityId?.trim();
+        const existing = actId ? day.activities.find(a => a.id === actId) : null;
         const capacityVal = number('capacity') || 22;
         const quantity = number('trips') * capacityVal;
 
@@ -347,7 +362,7 @@ document.addEventListener('submit', async event => {
         }
 
         const record = {
-          id: existing?.id || uid(), sector: newSector, activity: val('activity'), process: val('process'),
+          id: existing ? existing.id : uid(), sector: newSector, activity: val('activity'), process: val('process'),
           layer: newLayer, layerType: layerTypeVal, pkStart: newPkStart, pkEnd: newPkEnd,
           requiredControls: reqCtrl, unit: newUnit, mode: tripsMode ? 'trips' : 'manual',
           quantity, trips: tripsMode ? number('trips') : 0, capacity: number('capacity') || 22,
@@ -355,7 +370,11 @@ document.addEventListener('submit', async event => {
           createdAt: existing?.createdAt || now(), photoIds: [...new Set(photoIds)], controls,
           ...(existing?.isAnnulled ? { isAnnulled: existing.isAnnulled, annulReason: existing.annulReason, annulledAt: existing.annulledAt, annulledBy: existing.annulledBy } : {})
         };
-        if (existing) Object.assign(existing, record); else day.activities.push(record);
+        if (existing) {
+          Object.assign(existing, record);
+        } else {
+          day.activities.push(record);
+        }
 
       } else if (type === 'annul') {
         const activity = day.activities.find(a => a.id === form.dataset.activityId);
@@ -471,14 +490,51 @@ import { loadState } from './data/sync.js';
 import { checkSession, signInWithOtp, verifyOtp, signInWithPassword, signOut } from './data/auth.js';
 
 async function load() {
-  window.addEventListener('online', () => retrySync(render));
+  const cachedLocal = localStorage.getItem('clikium_terreno_state_cache');
   const pendingLocal = localStorage.getItem('clikium_terreno_pending_state');
+  const savedDayId = localStorage.getItem('clikium_selected_day_id');
+  if (savedDayId) stateStore.selectedDayId = savedDayId;
+
   if (pendingLocal) {
     try {
       stateStore.pendingSyncState = JSON.parse(pendingLocal);
-      updateSaveStatus('pending');
+      if (stateStore.pendingSyncState?.state) {
+        stateStore.state = stateStore.pendingSyncState.state;
+      }
+    } catch (e) {}
+  } else if (cachedLocal) {
+    try {
+      stateStore.state = JSON.parse(cachedLocal);
     } catch (e) {}
   }
+
+  // Renderizar estado local de inmediato si existe
+  if (stateStore.state) {
+    updateSaveStatus(stateStore.pendingSyncState ? 'pending' : 'offline', stateStore.pendingSyncState ? null : '⚡ Copia local');
+    render();
+  }
+
+  // Eventos de reconexión y visibilidad móvil
+  window.addEventListener('online', () => {
+    if (stateStore.pendingSyncState) retrySync(render);
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      if (stateStore.state) persistLocalState(stateStore.state);
+    } else if (document.visibilityState === 'visible' && navigator.onLine && stateStore.pendingSyncState) {
+      retrySync(render);
+    }
+  });
+  window.addEventListener('pagehide', () => {
+    if (stateStore.state) persistLocalState(stateStore.state);
+  });
+
+  // Reintento periódico en segundo plano
+  setInterval(() => {
+    if (navigator.onLine && stateStore.pendingSyncState && !stateStore.saving) {
+      retrySync(render);
+    }
+  }, 35000);
 
   try {
     // Check for hash errors from previous Supabase redirect
@@ -675,27 +731,31 @@ async function load() {
     const result = await loadState();
     
     stateStore.catalog = result.catalog;
+    stateStore.version = result.version;
+    stateStore.media = result.media;
+    stateStore.remoteState = structuredClone(result.state);
 
     if (stateStore.pendingSyncState && stateStore.pendingSyncState.state) {
-      stateStore.state = stateStore.pendingSyncState.state;
-      stateStore.version = result.version;
-      stateStore.media = result.media;
-      updateSaveStatus('pending');
-      retrySync(render);
-    } else {
-      stateStore.state = result.state;
-      stateStore.version = result.version;
-      stateStore.media = result.media;
-      updateSaveStatus('saved');
-    }
-    render();
-  } catch (error) {
-    if (stateStore.pendingSyncState && stateStore.pendingSyncState.state) {
-      stateStore.state = stateStore.pendingSyncState.state;
-      stateStore.version = stateStore.pendingSyncState.version || 1;
+      // Combinar cambios locales pendientes sobre el estado remoto para no perder ningún dato
+      const merged = mergePendingWithRemote(result.state, stateStore.pendingSyncState.state);
+      stateStore.state = merged;
+      persistLocalState(merged);
       updateSaveStatus('pending');
       render();
-      toast('Modo fuera de línea: usando borrador local.');
+      // Reintentar sincronización con Supabase
+      await retrySync(render);
+    } else {
+      stateStore.state = result.state;
+      persistLocalState(result.state);
+      updateSaveStatus('saved');
+      render();
+    }
+  } catch (error) {
+    console.warn("Carga remota fallida:", error);
+    if (stateStore.state) {
+      updateSaveStatus('offline', '⚡ Fuera de línea (copia local)');
+      render();
+      toast('Modo fuera de línea: usando copia local.');
     } else {
       updateSaveStatus('error');
       $('#main').innerHTML = `

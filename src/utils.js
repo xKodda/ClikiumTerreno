@@ -32,6 +32,18 @@ export const timeOnly = at => new Intl.DateTimeFormat('es-CL', {
   hour: '2-digit', minute: '2-digit', timeZone: 'America/Santiago'
 }).format(new Date(at));
 
+export const normalizeProjectId = proj => {
+  if (!proj) return 'tunel_lo_ruiz';
+  const clean = String(proj).trim().toLowerCase().replace(/\s+/g, '_').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (clean.includes('tunel') || clean.includes('ruiz')) return 'tunel_lo_ruiz';
+  return clean || 'tunel_lo_ruiz';
+};
+
+export const projectDisplayName = projId => {
+  if (!projId || projId === 'tunel_lo_ruiz') return 'Túnel Lo Ruiz';
+  return projId;
+};
+
 export const isBotaderoOrAcopio = sector => !!sector && (sector.toLowerCase().includes('botadero') || sector.toLowerCase().includes('acopio'));
 
 export const sectorUsesPk = sector => !!sector && /^\s*(eje\b|camino)/i.test(sector);
