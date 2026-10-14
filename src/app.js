@@ -7,7 +7,8 @@ import {
   sectorUsesPk, pkNumber, normalizePk, nameKey, statusClass, badge, controlBadges,
   layerLabel, activityStage, getActivityStatus, getControlStatus,
   requiredControlsLabel, findAssignedActivity, textarea,
-  projectDisplayName, normalizeProjectId
+  projectDisplayName, normalizeProjectId,
+  formatActivityMeta, parseActivityMeta, isLayerActivity, isLoadingActivity, isTransferActivity
 } from './utils.js';
 
 import {
@@ -18,7 +19,7 @@ import {
 
 import {
   modal, showDialog, startForm, activityForm, resourceForm, multiPersonForm,
-  copyYesterdayCrewForm, controlForm, annulForm, updateQuantityForm,
+  copyYesterdayCrewForm, controlForm, annulForm, updateActivityForm, updateQuantityForm,
   updateSectorForm, updateLayerForm, repeatPreviousActivity, detail, demo
 } from './dialogs.js';
 
@@ -202,7 +203,7 @@ document.addEventListener('click', async event => {
               <input type="tel" id="matias-phone-input" placeholder="+56 9 1234 5678" style="font-size:16px;font-weight:600">
             </label>
             <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:6px">
-              <button type="button" class="btn btn-whatsapp" onclick="window.saveAndSendWa()">Guardar y Enviar 📱</button>
+              <button type="button" class="btn btn-whatsapp" onclick="window.saveAndSendWa()">Guardar y Enviar</button>
             </div>
           </div>`
         );
@@ -224,9 +225,7 @@ document.addEventListener('click', async event => {
 
 document.addEventListener('input', event => {
   if (event.target.closest('[data-form="activity"]')) {
-    updateQuantityForm();
-    updateSectorForm();
-    updateLayerForm();
+    updateActivityForm();
   }
   if (event.target.id === 'history-search') {
     stateStore.historySearch = event.target.value;
@@ -239,9 +238,7 @@ document.addEventListener('input', event => {
 
 document.addEventListener('change', event => {
   if (event.target.closest('[data-form="activity"]')) {
-    updateQuantityForm();
-    updateSectorForm();
-    updateLayerForm();
+    updateActivityForm();
   }
   const id = event.target.id;
   if (id === 'single-activity-select') {
@@ -329,12 +326,19 @@ document.addEventListener('submit', async event => {
           photoIds.push(form._uploadedPhotos.get(key));
         }
 
-        const layerTypeVal = val('layerType') || 'terraplen_4';
-        const isCapa = ['terraplen_4', 'terraplen_6', 'relleno_estructural_3', 'relleno', 'marina'].includes(layerTypeVal);
+        const actVal = val('activity');
+        const needsLayer = isLayerActivity(actVal);
+        const layerTypeVal = needsLayer ? (val('layerType') || 'terraplen_4') : '';
+        const isCapa = needsLayer && ['terraplen_4', 'terraplen_6', 'relleno_estructural_3', 'relleno', 'marina'].includes(layerTypeVal);
         const newLayer = isCapa ? number('layer') : 0;
         const newPkStart = pkStartVal, newPkEnd = pkEndVal, newUnit = 'm³', newSector = val('sector');
         const reqCtrl = val('requiredControls') || 'both';
         const stageVal = val('stage') || 'Terminado';
+
+        const materialVal = isLoadingActivity(actVal) ? val('material') : '';
+        const transferDestVal = isTransferActivity(actVal) ? val('transferDestination') : '';
+        const transferPurpVal = isTransferActivity(actVal) ? val('transferPurpose') : '';
+        const formattedDesc = formatActivityMeta(val('description'), materialVal, transferDestVal, transferPurpVal);
 
         let initialControl;
         if (reqCtrl === 'none') {
@@ -375,11 +379,11 @@ document.addEventListener('submit', async event => {
         }
 
         const record = {
-          id: existing ? existing.id : uid(), sector: newSector, activity: val('activity'), process: val('process'),
+          id: existing ? existing.id : uid(), sector: newSector, activity: actVal, process: val('process'),
           layer: newLayer, layerType: layerTypeVal, pkStart: newPkStart, pkEnd: newPkEnd,
           requiredControls: reqCtrl, unit: newUnit, mode: tripsMode ? 'trips' : 'manual',
           quantity, trips: tripsMode ? number('trips') : 0, capacity: number('capacity') || 22,
-          stage: stageVal, description: val('description'), notes: val('notes'),
+          stage: stageVal, description: formattedDesc, notes: val('notes'),
           createdAt: existing?.createdAt || now(), photoIds: [...new Set(photoIds)], controls,
           ...(existing?.isAnnulled ? { isAnnulled: existing.isAnnulled, annulReason: existing.annulReason, annulledAt: existing.annulledAt, annulledBy: existing.annulledBy } : {})
         };
@@ -529,7 +533,7 @@ async function load() {
 
   // Renderizar estado local de inmediato si existe
   if (stateStore.state) {
-    updateSaveStatus(stateStore.pendingSyncState ? 'pending' : 'offline', stateStore.pendingSyncState ? null : '⚡ Copia local');
+    updateSaveStatus(stateStore.pendingSyncState ? 'pending' : 'offline', stateStore.pendingSyncState ? null : 'Copia local');
     render();
   }
 
@@ -582,7 +586,7 @@ async function load() {
             <h2 class="text-xl font-bold text-slate-900 mb-1">Clikium Terreno</h2>
             <p class="text-slate-500 mb-4 text-xs">Acceso a faena · Túnel Lo Ruiz</p>
 
-            ${hashErrorMsg ? `<div class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs text-left leading-relaxed">⚠️ ${esc(hashErrorMsg)}</div>` : ''}
+            ${hashErrorMsg ? `<div class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs text-left leading-relaxed">Aviso: ${esc(hashErrorMsg)}</div>` : ''}
             <div id="login-alert-banner"></div>
             
             <div class="flex border-b border-slate-200 mb-4 text-xs font-semibold">
@@ -691,7 +695,7 @@ async function load() {
           if (banner) {
             banner.innerHTML = `
               <div class="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs text-left leading-relaxed">
-                ✓ Enlace enviado a <strong>${esc(email)}</strong>. Puedes hacer clic en el enlace de tu correo o ingresar el código de 6 dígitos aquí abajo.
+                Enlace enviado a <strong>${esc(email)}</strong>. Puedes hacer clic en el enlace de tu correo o ingresar el código de 6 dígitos aquí abajo.
               </div>`;
           }
         } catch (err) {
@@ -705,7 +709,7 @@ async function load() {
             if (banner) {
               banner.innerHTML = `
                 <div class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs text-left leading-relaxed">
-                  ⚠️ <strong>Límite de correos superado:</strong> Supabase limita los envíos por hora en cuentas gratuitas. Ingresa con tu <strong>contraseña</strong> directamente.
+                  <strong>Límite de correos superado:</strong> Supabase limita los envíos por hora en cuentas gratuitas. Ingresa con tu <strong>contraseña</strong> directamente.
                 </div>`;
             }
           } else {
@@ -773,7 +777,7 @@ async function load() {
   } catch (error) {
     console.warn("Carga remota fallida:", error);
     if (stateStore.state) {
-      updateSaveStatus('offline', '⚡ Fuera de línea (copia local)');
+      updateSaveStatus('offline', 'Fuera de línea (copia local)');
       render();
       toast('Modo fuera de línea: usando copia local.');
     } else {

@@ -48,46 +48,133 @@ export const isBotaderoOrAcopio = sector => !!sector && (sector.toLowerCase().in
 
 export const sectorUsesPk = sector => !!sector && /^\s*(eje\b|camino)/i.test(sector);
 
+export const PROJECT_MATERIALS = [
+  'Base',
+  'Marina',
+  'Escarpe',
+  'Excavación TCN',
+  'Material inadecuado',
+  'Material no competente',
+  'Terraplén bajo 4"',
+  'Terraplén bajo 6"',
+  'Relleno estructural bajo 3"',
+  'Material de relleno'
+];
+
+export const TRANSFER_DESTINATIONS = [
+  'Centro de acopio',
+  'Botadero',
+  'Camino de servicio',
+  'Acceso al túnel',
+  'Plataforma de trabajo',
+  'Frente de avance',
+  'Otro destino'
+];
+
+export const TRANSFER_PURPOSES = [
+  'Mejoramiento de camino',
+  'Mejoramiento de condiciones de terreno',
+  'Centro de acopio',
+  'Mejoramiento de acceso',
+  'Disposición en botadero',
+  'Terraplén de acceso',
+  'Cama de apoyo',
+  'Otra finalidad'
+];
+
+export const isLoadingActivity = act => {
+  if (!act) return false;
+  const a = String(act).toLowerCase();
+  return a.includes('cargu') || a.includes('excav') || a.includes('escarpe');
+};
+
+export const isTransferActivity = act => {
+  if (!act) return false;
+  const a = String(act).toLowerCase();
+  return a.includes('traslado') || a.includes('transporte');
+};
+
+export const isLayerActivity = act => {
+  if (!act) return false;
+  const a = String(act).toLowerCase();
+  // El carguío puro o traslado de material no trabaja sobre capas de compactación
+  if ((a === 'carguío' || a === 'carguio' || a.includes('traslado')) && !a.includes('extendido')) {
+    return false;
+  }
+  if (a.includes('escarpe') || (a.includes('excav') && !a.includes('sello'))) {
+    return false;
+  }
+  return true;
+};
+
 export const pkNumber = pk => {
   if (pk === null || pk === undefined) return null;
-  const str = String(pk).trim();
+  let str = String(pk).trim().replace(/^pk\s*:?\s*/i, '').trim();
   if (!str) return null;
   if (str.includes('+')) {
     const [kmStr, mStr] = str.split('+');
-    const km = Number(kmStr);
-    const m = Number(mStr);
-    return isNaN(km) || isNaN(m) ? null : km * 1000 + m;
+    const km = parseFloat(kmStr);
+    const m = parseFloat(mStr);
+    return isNaN(km) || isNaN(m) ? null : Math.round((km * 1000 + m) * 100) / 100;
   }
-  const meters = Number(str);
-  return isNaN(meters) || meters < 0 ? null : meters;
+  const meters = parseFloat(str);
+  return isNaN(meters) || meters < 0 ? null : Math.round(meters * 100) / 100;
 };
 
 export const normalizePk = val => {
   if (val === null || val === undefined) return '';
-  const str = String(val).trim();
+  let str = String(val).trim().replace(/^pk\s*:?\s*/i, '').trim();
   if (!str) return '';
 
-  // Si ya tiene '+', separar km y metros
+  // Si ya tiene '+', separar km y metros respetando decimales exactos
   if (str.includes('+')) {
     const parts = str.split('+');
     const km = parseInt(parts[0], 10);
     const mRaw = parts[1];
     if (isNaN(km) || isNaN(parseFloat(mRaw))) return str;
-    const mParts = mRaw.split('.');
-    const mInt = mParts[0].padStart(3, '0');
-    const mDec = mParts[1] ? `.${mParts[1].slice(0, 2)}` : '';
-    return `${km}+${mInt}${mDec}`;
+    const mNum = Math.round(parseFloat(mRaw) * 100) / 100;
+    const mInt = Math.floor(mNum);
+    const dec = Math.round((mNum - mInt) * 100);
+    const mDec = dec > 0 ? '.' + String(dec).padStart(2, '0').replace(/0+$/, '') : '';
+    return `${km}+${String(mInt).padStart(3, '0')}${mDec}`;
   }
 
-  // Si se ingresó sólo número o decimal (ej: 0 -> 0+000, 5 -> 0+005, 200 -> 0+200, 800 -> 0+800, 1250 -> 1+250)
+  // Si se ingresó solo número de metros (ej: 1179.42 -> 1+179.42, 800 -> 0+800, 1600 -> 1+600)
   const num = parseFloat(str);
   if (isNaN(num) || num < 0) return str;
-  const km = Math.floor(num / 1000);
-  const mRem = num % 1000;
-  const mParts = String(mRem).split('.');
-  const mInt = mParts[0].padStart(3, '0');
-  const mDec = mParts[1] ? `.${mParts[1].slice(0, 2)}` : '';
-  return `${km}+${mInt}${mDec}`;
+  const rounded = Math.round(num * 100) / 100;
+  const km = Math.floor(rounded / 1000);
+  const mRem = Math.round((rounded - km * 1000) * 100) / 100;
+  const mInt = Math.floor(mRem);
+  const dec = Math.round((mRem - mInt) * 100);
+  const mDec = dec > 0 ? '.' + String(dec).padStart(2, '0').replace(/0+$/, '') : '';
+  return `${km}+${String(mInt).padStart(3, '0')}${mDec}`;
+};
+
+export const formatActivityMeta = (desc, { material, destination, purpose } = {}) => {
+  const tags = [];
+  if (material) tags.push(`Material: ${material}`);
+  if (destination) tags.push(`Destino: ${destination}`);
+  if (purpose) tags.push(`Finalidad: ${purpose}`);
+  const prefix = tags.length ? `[${tags.join(' | ')}]` : '';
+  const clean = String(desc || '').replace(/^\[[^\]]+\]\s*/, '').trim();
+  if (prefix && clean) return `${prefix} ${clean}`;
+  return prefix || clean;
+};
+
+export const parseActivityMeta = (desc = '') => {
+  const str = String(desc || '').trim();
+  if (!str.startsWith('[')) return { material: '', destination: '', purpose: '', cleanDescription: str };
+  const match = str.match(/^\[([^\]]+)\]\s*(.*)$/);
+  if (!match) return { material: '', destination: '', purpose: '', cleanDescription: str };
+  const tokens = match[1].split('|').map(s => s.trim());
+  let material = '', destination = '', purpose = '';
+  for (const t of tokens) {
+    if (/^material\s*:/i.test(t)) material = t.replace(/^material\s*:\s*/i, '').trim();
+    if (/^destino\s*:/i.test(t)) destination = t.replace(/^destino\s*:\s*/i, '').trim();
+    if (/^finalidad\s*:/i.test(t)) purpose = t.replace(/^finalidad\s*:\s*/i, '').trim();
+  }
+  return { material, destination, purpose, cleanDescription: match[2].trim() };
 };
 
 export const statusClass = status => {

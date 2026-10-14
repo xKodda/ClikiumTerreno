@@ -12,7 +12,7 @@ import { selectedDay, metadata, amount, getMediaUrl } from '../state.js';
 export function reportText(day) {
   const crewTotalHh = day.crew.reduce((n, p) => n + p.hours + (p.extra || 0), 0);
   return [
-    `📋 INFORME DIARIO DE TERRENO · CLIKIUM (BETA)`,
+    `INFORME DIARIO DE TERRENO — CLIKIUM`,
     `PROYECTO: ${projectDisplayName(day.project)}${day.isDemo ? ' · EJEMPLO' : ''}`,
     `FECHA: ${day.date} · RESPONSABLE: ${day.user}`,
     `ESTADO JORNADA: ${day.closedAt ? 'Cerrada' : 'En curso'}`,
@@ -26,30 +26,30 @@ export function reportText(day) {
         : '';
       const pkText = (sectorUsesPk(a.sector) && a.pkStart) ? ` · PK ${a.pkStart} a ${a.pkEnd}` : '';
       return [
-        `▶ ${i + 1}. ${a.activity} / ${a.process}${layerLabel(a) !== 'Sin capa' ? ' / ' + layerLabel(a) : ''}`,
+        `${i + 1}. ${a.activity} / ${a.process}${layerLabel(a) !== 'Sin capa' ? ' / ' + layerLabel(a) : ''}`,
         `   Sector: ${a.sector}${pkText}`,
         `   Avance: ${amount(a)}${a.mode === 'trips' ? ' (' + a.trips + ' viajes × ' + num(a.capacity) + ' m³)' : ''}`,
         `   Estado: ${activityStage(a)} · Control: ${getActivityStatus(a)}${a.requiredControls !== 'none' ? ` (Lab: ${getControlStatus(a, 'Laboratorio')} · Topo: ${getControlStatus(a, 'Topografía')})` : ''}`,
         resText ? `   ${resText}` : '',
         a.description ? `   Descrip: ${a.description}` : '',
         a.notes ? `   Obs: ${a.notes}` : '',
-        a.photoIds.length ? `   📸 ${a.photoIds.length} fotos adjuntas` : '',
+        a.photoIds.length ? `   [${a.photoIds.length} fotos adjuntas]` : '',
         ''
       ].filter(Boolean);
     }),
     '----------------------------------------',
-    `👷 HORAS HOMBRE (HH) POR TRABAJADOR (${day.crew.length} personas · ${num(crewTotalHh)} HH):`,
+    `HORAS HOMBRE (HH) POR TRABAJADOR (${day.crew.length} personas · ${num(crewTotalHh)} HH):`,
     ...day.crew.map(p => {
       const tot = p.hours + (p.extra || 0);
       const extraTxt = p.extra ? ` [${p.hours}h + ${p.extra}h ext]` : '';
       const asigTxt = p.assignment ? ` → Asignación: ${p.assignment}` : ' → General';
-      return `   • ${p.name} (${p.role || 'M1'}): ${num(tot)} HH${extraTxt}${asigTxt}`;
+      return `   - ${p.name} (${p.role || 'M1'}): ${num(tot)} HH${extraTxt}${asigTxt}`;
     }),
     `   TOTAL HH DEL DÍA: ${num(crewTotalHh)} HH`,
     '----------------------------------------',
-    '🚜 MAQUINARIA:',
-    ...day.machines.map(m => `   • ${m.name} (${m.operator}): ${num(m.hours)}h op · ${num(m.standby)}h std-by`),
-    day.notes ? `\n📝 Observaciones generales: ${day.notes}` : '',
+    'MAQUINARIA:',
+    ...day.machines.map(m => `   - ${m.name} (${m.operator}): ${num(m.hours)}h op · ${num(m.standby)}h std-by`),
+    day.notes ? `\nObservaciones generales: ${day.notes}` : '',
     '',
     `Emitido desde faena por ${day.user}.`
   ].filter(x => x !== undefined).join('\n');
@@ -70,7 +70,7 @@ export function renderReport() {
 
   return `<div class="report-actions">
     <button class="btn btn-secondary" data-action="navigate" data-view="today">← Volver</button>
-    <button class="btn btn-whatsapp" data-action="whatsapp-report" data-id="${esc(day.id)}">📱 WhatsApp</button>
+    <button class="btn btn-whatsapp" data-action="whatsapp-report" data-id="${esc(day.id)}">WhatsApp</button>
     <button class="btn btn-primary" data-action="print">${icon('report')}PDF</button>
     <button class="btn btn-secondary" data-action="copy-report" data-id="${esc(day.id)}">Copiar texto</button>
   </div>

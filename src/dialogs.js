@@ -7,7 +7,9 @@ import {
   textarea, statusClass, badge, controlBadges, layerLabel, activityLabel,
   activityStage, getActivityStatus, requiredControlsLabel, sectorUsesPk,
   pkNumber, normalizePk, nameKey, toast, findAssignedActivity,
-  projectDisplayName, normalizeProjectId
+  projectDisplayName, normalizeProjectId, PROJECT_MATERIALS,
+  TRANSFER_DESTINATIONS, TRANSFER_PURPOSES, isLoadingActivity,
+  isTransferActivity, isLayerActivity, formatActivityMeta, parseActivityMeta
 } from './utils.js';
 import {
   stateStore, selectedDay, allActivities, metadata, amount, capatazField,
@@ -94,16 +96,55 @@ export function updateLayerForm() {
   }
 }
 
+export function updateActivityForm() {
+  const form = $('#dialog-form'); if (form?.dataset.form !== 'activity') return;
+  const act = form.elements.activity?.value || '';
+
+  // 1. Visibilidad de Material
+  const matSec = $('#material-section');
+  if (matSec) {
+    const showMat = isLoadingActivity(act) || act.includes('Descarga') || act.includes('Extendido') || act.includes('Compactación');
+    matSec.hidden = !showMat;
+    if (form.elements.material) form.elements.material.disabled = !showMat;
+  }
+
+  // 2. Visibilidad de Traslado (Destino y Finalidad)
+  const transferSec = $('#transfer-section');
+  if (transferSec) {
+    const showTransfer = isTransferActivity(act);
+    transferSec.hidden = !showTransfer;
+    if (form.elements.transferDestination) form.elements.transferDestination.disabled = !showTransfer;
+    if (form.elements.transferPurpose) form.elements.transferPurpose.disabled = !showTransfer;
+  }
+
+  // 3. Visibilidad de Capa (se oculta en carguío puro o traslado)
+  const layerSec = $('#layer-section');
+  if (layerSec) {
+    const showLayer = isLayerActivity(act);
+    layerSec.hidden = !showLayer;
+    if (form.elements.layerType) form.elements.layerType.disabled = !showLayer;
+    if (form.elements.layer) form.elements.layer.disabled = !showLayer;
+  }
+
+  updateQuantityForm();
+  updateSectorForm();
+  updateLayerForm();
+}
+
 export function repeatPreviousActivity(dayId) {
   const form = $('#dialog-form'); if (!form || form.dataset.form !== 'activity') return;
   const day = stateStore.state.days.find(d => d.id === dayId);
   const lastAct = day?.activities.filter(a => !a.isAnnulled).at(-1) || allActivities().filter(a => !a.isAnnulled && !a.day.isDemo).at(-1);
   if (!lastAct) return toast('No hay actividades anteriores para repetir.');
 
-  if (form.elements.activity) form.elements.activity.value = lastAct.activity || 'Excavación';
+  const meta = parseActivityMeta(lastAct.description);
+  if (form.elements.activity) form.elements.activity.value = lastAct.activity || 'Carguío';
+  if (form.elements.material && (lastAct.material || meta.material)) form.elements.material.value = lastAct.material || meta.material;
+  if (form.elements.transferDestination && (lastAct.transferDestination || meta.destination)) form.elements.transferDestination.value = lastAct.transferDestination || meta.destination;
+  if (form.elements.transferPurpose && (lastAct.transferPurpose || meta.purpose)) form.elements.transferPurpose.value = lastAct.transferPurpose || meta.purpose;
   if (form.elements.process) form.elements.process.value = lastAct.process || 'Movimiento de tierra';
   if (form.elements.sector) form.elements.sector.value = lastAct.sector || 'Eje 48';
-  if (form.elements.layerType) form.elements.layerType.value = lastAct.layerType || (lastAct.layer ? 'terraplen_4' : 'terraplen_4');
+  if (form.elements.layerType) form.elements.layerType.value = lastAct.layerType || 'terraplen_4';
   if (form.elements.layer) form.elements.layer.value = lastAct.layer || 1;
   if (form.elements.pkStart) form.elements.pkStart.value = lastAct.pkStart || '';
   if (form.elements.pkEnd) form.elements.pkEnd.value = lastAct.pkEnd || '';
@@ -117,9 +158,7 @@ export function repeatPreviousActivity(dayId) {
   if (form.elements.description) form.elements.description.value = '';
   if (form.elements.notes) form.elements.notes.value = '';
 
-  updateQuantityForm();
-  updateSectorForm();
-  updateLayerForm();
+  updateActivityForm();
   toast('Datos copiados de la actividad anterior. Completa cantidad y fotos.');
 }
 
@@ -128,12 +167,39 @@ export function activityForm(dayId, activityId = '', preset = '') {
   if (!day || day.closedAt) return toast('La jornada está cerrada. Puedes agregar controles al registro.');
   const a = day.activities.find(x => x.id === activityId);
   const templates = {
-    excavation: { activity: 'Excavación', process: 'Movimiento de tierra', unit: 'm³', requiredControls: 'top', layerType: 'sello_natural', stage: 'Terminado' },
-    fill: { activity: 'Descarga, extendido y compactado', process: 'Relleno estructural', unit: 'm³', requiredControls: 'both', layerType: 'relleno_estructural_3', layer: 1, stage: 'Terminado' },
-    compact: { activity: 'Compactación', process: 'Terraplén', unit: 'capas', requiredControls: 'both', layerType: 'terraplen_4', layer: 1, stage: 'Terminado' }
+    excavation: { activity: 'Excavación', material: 'Excavación TCN', process: 'Movimiento de tierra', unit: 'm³', requiredControls: 'top', layerType: 'sello_natural', stage: 'Terminado' },
+    fill: { activity: 'Descarga, extendido y compactado', material: 'Relleno estructural bajo 3"', process: 'Relleno estructural', unit: 'm³', requiredControls: 'both', layerType: 'relleno_estructural_3', layer: 1, stage: 'Terminado' },
+    compact: { activity: 'Compactación', material: 'Terraplén bajo 4"', process: 'Terraplén', unit: 'capas', requiredControls: 'both', layerType: 'terraplen_4', layer: 1, stage: 'Terminado' }
   };
-  const value = a || {
-    ...{ sector: 'Eje 48', activity: 'Excavación', process: 'Movimiento de tierra', requiredControls: 'both', layer: 1, layerType: 'terraplen_4', pkStart: '', pkEnd: '', unit: 'm³', quantity: 0, mode: 'manual', trips: 0, capacity: 22, stage: 'Terminado', description: '', notes: '' },
+
+  const parsedMeta = parseActivityMeta(a?.description || '');
+  const value = a ? {
+    ...a,
+    material: a.material || parsedMeta.material || 'Marina',
+    transferDestination: a.transferDestination || parsedMeta.destination || 'Centro de acopio',
+    transferPurpose: a.transferPurpose || parsedMeta.purpose || 'Mejoramiento de camino',
+    cleanDesc: parsedMeta.cleanDescription
+  } : {
+    sector: 'Eje 48',
+    activity: 'Carguío',
+    material: 'Marina',
+    transferDestination: 'Centro de acopio',
+    transferPurpose: 'Mejoramiento de camino',
+    process: 'Movimiento de tierra',
+    requiredControls: 'both',
+    layer: 1,
+    layerType: 'terraplen_4',
+    pkStart: '',
+    pkEnd: '',
+    unit: 'm³',
+    quantity: 0,
+    mode: 'manual',
+    trips: 0,
+    capacity: 22,
+    stage: 'Terminado',
+    description: '',
+    cleanDesc: '',
+    notes: '',
     ...(templates[preset] || {})
   };
 
@@ -144,11 +210,12 @@ export function activityForm(dayId, activityId = '', preset = '') {
   }
 
   const defaultActivities = [
-    'Excavación', 'Carguío', 'Descarga', 'Extendido', 'Compactación',
-    'Carguío y extendido', 'Descarga y extendido', 'Extendido y compactado',
-    'Descarga, extendido y compactado', 'Perfilado y compactación',
-    'Perfilado', 'Humectación', 'Instalación de tubos', 'Mejoramiento de sello',
-    'Cama de apoyo', 'Obras civiles'
+    'Carguío', 'Carguío y traslado', 'Carguío y extendido',
+    'Excavación', 'Escarpe',
+    'Descarga', 'Descarga y extendido', 'Extendido', 'Extendido y compactado',
+    'Compactación', 'Descarga, extendido y compactado',
+    'Perfilado y compactación', 'Perfilado', 'Humectación',
+    'Instalación de tubos', 'Mejoramiento de sello', 'Cama de apoyo', 'Obras civiles'
   ];
   const activityList = [...defaultActivities];
   if (value.activity && !activityList.includes(value.activity)) {
@@ -156,12 +223,12 @@ export function activityForm(dayId, activityId = '', preset = '') {
   }
 
   const layerTypeOptions = [
-    { value: 'terraplen_4', label: 'terraplén (Material bajo 4")' },
-    { value: 'terraplen_6', label: 'terraplén (Material bajo 6")' },
-    { value: 'relleno_estructural_3', label: 'relleno estructural (Material bajo 3")' },
+    { value: 'terraplen_4', label: 'Terraplén (Material bajo 4")' },
+    { value: 'terraplen_6', label: 'Terraplén (Material bajo 6")' },
+    { value: 'relleno_estructural_3', label: 'Relleno estructural (Material bajo 3")' },
     { value: 'sello_natural', label: 'Sello natural' },
     { value: 'sello_mejorado', label: 'Sello mejorado' },
-    { value: 'marina', label: 'marina' }
+    { value: 'marina', label: 'Marina' }
   ];
 
   const requiredOptions = [
@@ -172,11 +239,76 @@ export function activityForm(dayId, activityId = '', preset = '') {
   ];
 
   const hasPrevious = !!(day.activities.find(act => !act.isAnnulled) || allActivities().find(act => !act.isAnnulled && !act.day.isDemo));
-  const repeatBar = !a && hasPrevious ? `<div class="repeat-bar"><span class="repeat-text">¿Registrando lo mismo? Copia los datos anteriores.</span><button type="button" class="btn btn-repeat" data-action="repeat-previous" data-day-id="${esc(dayId)}">${icon('history')} Repetir actividad anterior</button></div>` : '';
-  const openDetails = a && (a.description || a.notes || a.process !== 'Movimiento de tierra');
+  const repeatBar = !a && hasPrevious ? `<div class="repeat-bar"><span class="repeat-text">¿Registrando lo mismo? Copia los datos anteriores.</span><button type="button" class="btn btn-repeat" data-action="repeat-previous" data-day-id="${esc(dayId)}">${icon('history')} Repetir anterior</button></div>` : '';
+  const openDetails = a && (value.cleanDesc || a.notes || a.process !== 'Movimiento de tierra');
 
-  showDialog(a ? 'Editar avance' : 'Registrar avance', 'El avance físico y la aprobación de calidad se registran por separado.', `${repeatBar}<div class="form-grid">${select('activity', 'Actividad', activityList, value.activity)}${sectorSelect(value.sector)}<div id="pk-fields" class="field full"><div class="form-grid">${input('pkStart', 'PK inicial', value.pkStart, 'placeholder="Ej: 0, 200, 800 o 1+210" title="Ingresa los metros (ej: 800) o con formato PK (ej: 0+800 o 1+210)"')}${input('pkEnd', 'PK final', value.pkEnd, 'placeholder="Ej: 50, 450, 1000 o 1+230" title="Ingresa los metros o formato PK"')}<span class="hint" style="grid-column:1/-1;margin-top:-6px">Puedes ingresar sólo los metros (ej. <b>800</b> a <b>1000</b>) y se guardará automáticamente como <b>0+800</b> a <b>1+000</b>. Admite también <b>PK 0</b> (0+000).</span></div></div><div class="field full" id="layer-section"><div class="form-grid">${select('layerType', 'Capa', layerTypeOptions, value.layerType)}<div id="layer-num-wrapper">${input('layer', 'Número de capa', value.layer || 1, 'type="number" min="1" max="500" step="1" placeholder="Ej: 1"')}</div></div></div>${select('stage', 'Estado de ejecución', ['Terminado', 'En curso'], value.stage || 'Terminado')}${select('requiredControls', 'Exigencia de control', requiredOptions, value.requiredControls || 'both')}<div class="form-divider">Cantidad ejecutada (Medición por viajes de tolva)</div><div class="field full"><div class="form-grid">${input('trips', 'Número de viajes', value.trips || '', 'type="number" min="0" max="100000" step="1" required')}${input('capacity', 'Capacidad por tolva (m³)', value.capacity || 22, 'type="number" min="0.1" max="1000" step="0.01" required')}</div></div><div id="trip-total" class="computed"></div><label class="field full"><span>Fotos del avance</span><input type="file" name="photos" accept="image/jpeg,image/png,image/webp" multiple><span class="hint">Se guardan con esta jornada, sector, actividad, capa y PK. Máximo 12 MB por foto. ${a ? 'Las fotos anteriores se conservan.' : ''}</span></label><details class="form-details" ${openDetails ? 'open' : ''}><summary class="details-summary"><span>Observaciones y detalles opcionales</span></summary><div class="form-grid" style="margin-top:14px">${select('process', 'Proceso', ['Movimiento de tierra', 'Relleno estructural', 'Terraplén', 'Subrasante', 'Base estabilizada', 'Bajo 4 pulgadas', 'Obra de arte', 'Muros TEM', 'Otro'], value.process)}${textarea('description', 'Descripción para el informe / foto', value.description)}${textarea('notes', 'Observaciones o interferencias', value.notes)}</div></details></div>`, { form: 'activity', dayId, activityId });
-  
+  showDialog(
+    a ? 'Editar avance' : 'Registrar avance',
+    'El avance físico y la aprobación de calidad se registran por separado.',
+    `${repeatBar}<div class="form-grid">
+      ${select('activity', 'Actividad', activityList, value.activity)}
+      ${sectorSelect(value.sector)}
+
+      <div class="field full" id="material-section">
+        <div class="form-grid">
+          ${select('material', 'Material cargado / intervenido', PROJECT_MATERIALS, value.material || 'Marina')}
+        </div>
+      </div>
+
+      <div class="field full" id="transfer-section">
+        <div class="form-grid">
+          ${select('transferDestination', 'Destino del traslado', TRANSFER_DESTINATIONS, value.transferDestination || 'Centro de acopio')}
+          ${select('transferPurpose', 'Finalidad / Uso del traslado', TRANSFER_PURPOSES, value.transferPurpose || 'Mejoramiento de camino')}
+        </div>
+      </div>
+
+      <div id="pk-fields" class="field full">
+        <div class="form-grid">
+          ${input('pkStart', 'PK inicial', value.pkStart, 'placeholder="Ej: 1179.42 o 1+179.42" title="Ingresa los metros o formato PK"')}
+          ${input('pkEnd', 'PK final', value.pkEnd, 'placeholder="Ej: 1600 o 1+600" title="Ingresa los metros o formato PK"')}
+          <span class="hint" style="grid-column:1/-1;margin-top:-6px">Ingresa los metros (ej. <b>1179.42</b> o <b>1600</b>) y se guardará como <b>1+179.42</b> a <b>1+600</b>. Admite también <b>PK 0</b> (0+000).</span>
+        </div>
+      </div>
+
+      <div class="field full" id="layer-section">
+        <div class="form-grid">
+          ${select('layerType', 'Tipo de capa', layerTypeOptions, value.layerType)}
+          <div id="layer-num-wrapper">
+            ${input('layer', 'Número de capa', value.layer || 1, 'type="number" min="1" max="500" step="1" placeholder="Ej: 1"')}
+          </div>
+        </div>
+      </div>
+
+      ${select('stage', 'Estado de ejecución', ['Terminado', 'En curso'], value.stage || 'Terminado')}
+      ${select('requiredControls', 'Exigencia de control', requiredOptions, value.requiredControls || 'both')}
+
+      <div class="form-divider">Cantidad ejecutada (Medición por viajes de tolva)</div>
+      <div class="field full">
+        <div class="form-grid">
+          ${input('trips', 'Número de viajes', value.trips || '', 'type="number" min="0" max="100000" step="1" required')}
+          ${input('capacity', 'Capacidad por tolva (m³)', value.capacity || 22, 'type="number" min="0.1" max="1000" step="0.01" required')}
+        </div>
+      </div>
+      <div id="trip-total" class="computed"></div>
+
+      <label class="field full">
+        <span>Fotos del avance</span>
+        <input type="file" name="photos" accept="image/jpeg,image/png,image/webp" multiple>
+        <span class="hint">Se guardan con esta jornada, sector, actividad, capa y PK. Máximo 12 MB por foto. ${a ? 'Las fotos anteriores se conservan.' : ''}</span>
+      </label>
+
+      <details class="form-details" ${openDetails ? 'open' : ''}>
+        <summary class="details-summary"><span>Observaciones y detalles opcionales</span></summary>
+        <div class="form-grid" style="margin-top:14px">
+          ${select('process', 'Proceso', ['Movimiento de tierra', 'Relleno estructural', 'Terraplén', 'Subrasante', 'Base estabilizada', 'Bajo 4 pulgadas', 'Obra de arte', 'Muros TEM', 'Otro'], value.process)}
+          ${textarea('description', 'Descripción para el informe / foto', value.cleanDesc || value.description || '')}
+          ${textarea('notes', 'Observaciones o interferencias', value.notes || '')}
+        </div>
+      </details>
+    </div>`,
+    { form: 'activity', dayId, activityId }
+  );
+
   const form = $('#dialog-form');
   if (form) {
     const handlePkBlur = e => {
@@ -189,9 +321,7 @@ export function activityForm(dayId, activityId = '', preset = '') {
     if (form.elements.pkEnd) form.elements.pkEnd.addEventListener('blur', handlePkBlur);
   }
 
-  updateQuantityForm();
-  updateSectorForm();
-  updateLayerForm();
+  updateActivityForm();
 }
 
 export function detail(dayId, activityId) {
@@ -200,14 +330,18 @@ export function detail(dayId, activityId) {
   if (!a) return;
   const overall = getActivityStatus(a);
   const stage = activityStage(a);
+  const meta = parseActivityMeta(a.description);
   const photos = a.photoIds.map(id => {
     const m = metadata(id);
     const url = getMediaUrl(id) || `/api/media/${id}`;
-    return `<a href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="${esc(a.description || a.activity)}"><span class="photo-label">${esc(m?.name || 'Foto de avance')}</span></a>`;
+    return `<a href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="${esc(meta.cleanDescription || a.activity)}"><span class="photo-label">${esc(m?.name || 'Foto de avance')}</span></a>`;
   }).join('');
   const annulBox = a.isAnnulled ? `<div class="annulled-box"><strong>REGISTRO ANULADO POR ERROR</strong><br>Motivo de anulación: ${esc(a.annulReason || 'Registrado por error')}<br><small>Anulado por ${esc(a.annulledBy || 'Capataz')} el ${stamp(a.annulledAt || a.createdAt)}</small></div>` : '';
   const pkLabel = (sectorUsesPk(a.sector) && a.pkStart) ? `PK ${esc(a.pkStart)}${a.pkStart !== a.pkEnd && a.pkEnd ? ` — ${esc(a.pkEnd)}` : ''}` : `Ubicación por sector (${esc(a.sector)})`;
   const layerBadge = layerLabel(a) !== 'Sin capa' ? `<span class="badge">${esc(layerLabel(a))}</span>` : '';
+  const matBadge = (a.material || meta.material) ? `<span class="badge">Material: ${esc(a.material || meta.material)}</span>` : '';
+  const transferInfo = (a.transferDestination || meta.destination || a.transferPurpose || meta.purpose) ? `<div style="font-size:0.85rem;color:#334155;margin-top:6px"><strong>Traslado:</strong> ${esc(a.transferDestination || meta.destination || '')}${a.transferPurpose || meta.purpose ? ` · Finalidad: ${esc(a.transferPurpose || meta.purpose)}` : ''}</div>` : '';
+
   const actCrew = day.crew.filter(p => findAssignedActivity(p, day)?.id === a.id);
   const actMachines = day.machines.filter(m => findAssignedActivity(m, day)?.id === a.id);
   const actHh = actCrew.reduce((n, p) => n + p.hours + p.extra, 0);
@@ -218,10 +352,49 @@ export function detail(dayId, activityId) {
         ${!day.closedAt ? `<button class="btn btn-sm btn-secondary" data-action="assign-crew" data-id="${a.id}" data-day-id="${day.id}">${icon('people')} + Asignar cuadrilla</button>` : ''}
       </div>
       ${actCrew.length ? `<div style="font-size:0.85rem;line-height:1.5">${actCrew.map(p => `<div>• <strong>${esc(p.name)}</strong> (${esc(p.role)}): ${num(p.hours)}h + ${num(p.extra)}h extra = <strong>${num(p.hours + p.extra)} HH</strong></div>`).join('')}</div>` : '<p class="muted" style="margin:0;font-size:0.83rem">No hay trabajadores vinculados directamente a esta actividad.</p>'}
-      ${actMachines.length ? `<div style="font-size:0.85rem;margin-top:8px;line-height:1.5;border-top:1px dashed #cbd5e1;padding-top:6px">${actMachines.map(m => `<div>🚜 <strong>${esc(m.name)}</strong> (Op: ${esc(m.operator || 'Sin operador')}): ${num(m.hours)} h op · ${num(m.standby)} h stand-by</div>`).join('')}</div>` : ''}
+      ${actMachines.length ? `<div style="font-size:0.85rem;margin-top:8px;line-height:1.5;border-top:1px dashed #cbd5e1;padding-top:6px">${actMachines.map(m => `<div>[Equipo] <strong>${esc(m.name)}</strong> (Op: ${esc(m.operator || 'Sin operador')}): ${num(m.hours)} h op · ${num(m.standby)} h stand-by</div>`).join('')}</div>` : ''}
     </div>`;
 
-  showDialog(a.activity, `${a.sector} · ${a.process} · ${day.date}`, `${annulBox}<div class="detail-meta">${badge(overall)}<span class="badge dark">Exigencia: ${esc(requiredControlsLabel(a.requiredControls))}</span>${controlBadges(a)}<span class="badge ${stage === 'Terminado' ? 'approved' : ''}">${esc(stage)}</span>${layerBadge}</div><div class="detail-grid"><div>Tramo<br><strong>${pkLabel}</strong></div><div>Cantidad ejecutada<br><strong>${amount(a)}</strong>${a.mode === 'trips' ? `<br>${a.trips} viajes × ${num(a.capacity)} m³` : ''}</div></div>${a.description ? `<p class="detail-description">${esc(a.description)}</p>` : ''}${a.notes ? `<p class="detail-description muted">${esc(a.notes)}</p>` : ''}${photos ? `<div class="photo-grid">${photos}</div>` : ''}${crewSection}<div class="section-head"><h3>Historial de controles</h3>${!a.isAnnulled && a.requiredControls !== 'none' ? `<button class="text-button" data-action="add-control" data-id="${a.id}" data-day-id="${day.id}">Agregar control</button>` : ''}</div><div class="timeline">${a.controls.map((c, i) => { const isNoReq = a.requiredControls === 'none'; const resolved = (c.status === 'Control pendiente' || c.status === 'Registro completo') && ['Aprobado', 'Registro completo', 'No requiere control'].includes(overall) && i < a.controls.length - 1; const resolvedAt = resolved ? a.controls.at(-1).at : null; const itemStatus = isNoReq ? 'Registro completo' : c.status; return `<div class="timeline-item ${resolved ? 'resolved' : statusClass(itemStatus)}">${resolved ? `<span class="badge resolved-badge">Control pendiente</span> <span class="badge approved">✓ Resuelto</span>` : badge(itemStatus)}<div class="meta">${stamp(c.at)} · ${esc(c.type)} · ${esc(c.author)}</div>${c.note ? `<div>${esc(c.note)}</div>` : (isNoReq ? '<div>Registro de ejecución física completo. No requiere ensayos ni recepción de calidad.</div>' : '')}${resolved ? `<div class="resolved-note">Cerrado por los controles aprobados el ${stamp(resolvedAt)}.</div>` : ''}${c.attachmentId ? `<a href="/api/media/${c.attachmentId}" target="_blank" rel="noopener">Ver protocolo adjunto</a>` : ''}</div>`; }).join('')}</div>${!day.closedAt && !a.isAnnulled ? `<div class="form-footer" style="gap:10px;flex-wrap:wrap"><button class="btn btn-secondary" data-action="edit-activity" data-id="${a.id}" data-day-id="${day.id}">Editar avance / fotos</button><button class="btn btn-danger-outline" data-action="annul-activity" data-id="${a.id}" data-day-id="${day.id}">Anular avance (por error)</button></div>` : (day.closedAt ? '<p class="hint">Jornada cerrada. El historial sigue admitiendo nuevos controles.</p>' : '')}`);
+  showDialog(
+    a.activity,
+    `${a.sector} · ${a.process} · ${day.date}`,
+    `${annulBox}
+    <div class="detail-meta">
+      ${badge(overall)}
+      <span class="badge dark">Exigencia: ${esc(requiredControlsLabel(a.requiredControls))}</span>
+      ${controlBadges(a)}
+      <span class="badge ${stage === 'Terminado' ? 'approved' : ''}">${esc(stage)}</span>
+      ${layerBadge}
+      ${matBadge}
+    </div>
+    <div class="detail-grid">
+      <div>Tramo<br><strong>${pkLabel}</strong></div>
+      <div>Cantidad ejecutada<br><strong>${amount(a)}</strong>${a.mode === 'trips' ? `<br>${a.trips} viajes × ${num(a.capacity)} m³` : ''}</div>
+    </div>
+    ${transferInfo}
+    ${meta.cleanDescription ? `<p class="detail-description">${esc(meta.cleanDescription)}</p>` : ''}
+    ${a.notes ? `<p class="detail-description muted">${esc(a.notes)}</p>` : ''}
+    ${photos ? `<div class="photo-grid">${photos}</div>` : ''}
+    ${crewSection}
+    <div class="section-head">
+      <h3>Historial de controles</h3>
+      ${!a.isAnnulled && a.requiredControls !== 'none' ? `<button class="text-button" data-action="add-control" data-id="${a.id}" data-day-id="${day.id}">Agregar control</button>` : ''}
+    </div>
+    <div class="timeline">${a.controls.map((c, i) => {
+      const isNoReq = a.requiredControls === 'none';
+      const resolved = (c.status === 'Control pendiente' || c.status === 'Registro completo') && ['Aprobado', 'Registro completo', 'No requiere control'].includes(overall) && i < a.controls.length - 1;
+      const resolvedAt = resolved ? a.controls.at(-1).at : null;
+      const itemStatus = isNoReq ? 'Registro completo' : c.status;
+      return `<div class="timeline-item ${resolved ? 'resolved' : statusClass(itemStatus)}">
+        ${resolved ? `<span class="badge resolved-badge">Control pendiente</span> <span class="badge approved">Resuelto</span>` : badge(itemStatus)}
+        <div class="meta">${stamp(c.at)} · ${esc(c.type)} · ${esc(c.author)}</div>
+        ${c.note ? `<div>${esc(c.note)}</div>` : (isNoReq ? '<div>Registro de ejecución física completo. No requiere ensayos ni recepción de calidad.</div>' : '')}
+        ${resolved ? `<div class="resolved-note">Cerrado por los controles aprobados el ${stamp(resolvedAt)}.</div>` : ''}
+        ${c.attachmentId ? `<a href="/api/media/${c.attachmentId}" target="_blank" rel="noopener">Ver protocolo adjunto</a>` : ''}
+      </div>`;
+    }).join('')}</div>
+    ${!day.closedAt && !a.isAnnulled ? `<div class="form-footer" style="gap:10px;flex-wrap:wrap"><button class="btn btn-secondary" data-action="edit-activity" data-id="${a.id}" data-day-id="${day.id}">Editar avance / fotos</button><button class="btn btn-danger-outline" data-action="annul-activity" data-id="${a.id}" data-day-id="${day.id}">Anular avance (por error)</button></div>` : (day.closedAt ? '<p class="hint">Jornada cerrada. El historial sigue admitiendo nuevos controles.</p>' : '')}`
+  );
 }
 
 export function annulForm(dayId, activityId) {

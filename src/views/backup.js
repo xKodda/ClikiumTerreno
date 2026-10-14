@@ -22,7 +22,7 @@ export function renderBackup() {
   ${isPending ? `
     <div style="background:#fffbeb;border:1px solid #fde68a;padding:14px 18px;border-radius:10px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
       <div style="font-size:0.88rem;color:#92400e;line-height:1.4">
-        ⚠️ <strong>Tienes cambios guardados en este dispositivo pendientes de sincronizar con Supabase.</strong>
+        <strong>Tienes cambios guardados en este dispositivo pendientes de sincronizar con Supabase.</strong>
         <br><span style="font-size:0.8rem;color:#b45309">Se guardaron de forma segura en la memoria de tu teléfono.</span>
       </div>
       <button class="btn btn-sm btn-retry" data-action="retry-sync" style="background:#f59e0b;color:white;padding:8px 14px;border-radius:8px">Sincronizar ahora</button>
@@ -60,7 +60,7 @@ export function renderBackup() {
       <div style="background:#f8fafc;border:1px solid #e2e8f0;padding:16px;border-radius:8px;margin-bottom:18px">
         <div style="display:flex;justify-content:space-between;margin-bottom:8px">
           <span>Estado del servidor:</span>
-          <strong style="color:${isPending ? '#d97706' : '#16a34a'}">${isPending ? '⚠️ Pendiente de sincronizar' : '● Conectado a la nube'}</strong>
+          <strong style="color:${isPending ? '#d97706' : '#16a34a'}">${isPending ? 'Pendiente de sincronizar' : 'Conectado a la nube'}</strong>
         </div>
         <div style="display:flex;justify-content:space-between;margin-bottom:8px">
           <span>Jornadas en la nube:</span>
@@ -73,7 +73,7 @@ export function renderBackup() {
       </div>
 
       <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <button class="btn btn-secondary" data-action="retry-sync">🔄 Forzar sincronización</button>
+        <button class="btn btn-secondary" data-action="retry-sync">Forzar sincronización</button>
         <button class="btn btn-danger-outline" data-action="logout">Cerrar sesión de capataz</button>
       </div>
       <p class="hint" style="margin-top:14px">Si no hay señal en el túnel, el sistema guarda en memoria local y sincroniza al recuperar cobertura.</p>

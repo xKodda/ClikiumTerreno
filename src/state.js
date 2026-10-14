@@ -166,19 +166,19 @@ export function updateSaveStatus(status, customHtml = null) {
   el.className = 'save-status';
   if (status === 'saving') {
     el.classList.add('status-saving');
-    el.innerHTML = '🔄 Guardando…';
+    el.innerHTML = '<span class="status-dot saving"></span> Guardando…';
   } else if (status === 'pending') {
     el.classList.add('status-pending');
-    el.innerHTML = customHtml || `⚠️ Pendiente <button class="btn btn-sm btn-retry" data-action="retry-sync">Reintentar</button>`;
+    el.innerHTML = customHtml || `<span class="status-dot pending"></span> Pendiente <button class="btn btn-sm btn-retry" data-action="retry-sync">Reintentar</button>`;
   } else if (status === 'saved') {
     el.classList.add('status-saved');
-    el.innerHTML = '● Sincronizado';
+    el.innerHTML = '<span class="status-dot saved"></span> Sincronizado';
   } else if (status === 'offline') {
     el.classList.add('status-offline');
-    el.innerHTML = customHtml || '⚡ Copia local';
+    el.innerHTML = customHtml || '<span class="status-dot offline"></span> Copia local';
   } else {
     el.classList.add('status-error');
-    el.innerHTML = customHtml || 'Sin conexión';
+    el.innerHTML = customHtml || '<span class="status-dot error"></span> Sin conexión';
   }
 }
 

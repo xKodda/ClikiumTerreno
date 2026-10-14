@@ -18,7 +18,7 @@ export function activityCard(a, day) {
   const actMachines = day.machines.filter(m => findAssignedActivity(m, day)?.id === a.id);
   const actHh = actCrew.reduce((n, p) => n + p.hours + p.extra, 0);
   const crewPill = actCrew.length
-    ? `<span class="activity-crew-pill">👥 ${actCrew.length} personas (${num(actHh)} HH)${actMachines.length ? ' · 🚜 ' + actMachines.map(m => esc(m.name)).join(', ') : ''}</span>`
+    ? `<span class="activity-crew-pill">Cuadrilla: ${actCrew.length} pers. (${num(actHh)} HH)${actMachines.length ? ' · Equipos: ' + actMachines.map(m => esc(m.name)).join(', ') : ''}</span>`
     : (!day.closedAt ? `<button type="button" class="crew-shortcut" data-action="assign-crew" data-id="${a.id}" data-day-id="${day.id}">+ Asignar cuadrilla</button>` : '');
 
   return `<article class="activity-card ${statusClass(overall)}">
@@ -98,7 +98,7 @@ export function renderDay() {
       <button class="btn btn-secondary" data-action="report" data-id="${day.id}">${icon('report')}Informe diario</button>
       ${!day.closedAt 
         ? primary('add-activity', '+ Registrar avance', day.id) 
-        : `<button class="btn btn-primary btn-reopen" data-action="reopen-day" data-id="${day.id}">🔓 Reabrir jornada</button>`
+        : `<button class="btn btn-primary btn-reopen" data-action="reopen-day" data-id="${day.id}">Reabrir jornada</button>`
       }
     </div>
   </div>
@@ -120,13 +120,13 @@ export function renderDay() {
   <div class="activity-layout">
     <section>
       <div class="section-head"><h2>Avances del día</h2><span class="muted">${photos} fotos adjuntas</span></div>
-      <div class="activity-list">${activities.length ? activities.map(a => activityCard(a, day)).join('') : empty('Tu primer avance', 'Registra lo que está pasando en terreno. Puedes dejar la ejecución en curso.', !day.closedAt ? primary('add-activity', 'Registrar avance', day.id) : `<button class="btn btn-primary btn-reopen" data-action="reopen-day" data-id="${day.id}">🔓 Reabrir jornada para registrar</button>`)}</div>
+      <div class="activity-list">${activities.length ? activities.map(a => activityCard(a, day)).join('') : empty('Tu primer avance', 'Registra lo que está pasando en terreno. Puedes dejar la ejecución en curso.', !day.closedAt ? primary('add-activity', 'Registrar avance', day.id) : `<button class="btn btn-primary btn-reopen" data-action="reopen-day" data-id="${day.id}">Reabrir jornada para registrar</button>`)}</div>
     </section>
     <aside class="side-panel">
       <h3>${day.closedAt ? 'Registro de la jornada' : 'Registro rápido'}</h3>
       ${!day.closedAt ? [['shovel', 'Excavación', 'excavation'], ['layers', 'Relleno estructural', 'fill'], ['check', 'Compactación', 'compact']].map(([i, label, preset]) => `<button class="quick-button" data-action="preset" data-preset="${preset}" data-id="${day.id}"><span class="quick-icon">${icon(i)}</span>${label}</button>`).join('') : ''}
       <button class="quick-button" data-action="navigate" data-view="resources"><span class="quick-icon">${icon('people')}</span>Personal y maquinaria</button>
-      <button class="quick-button quick-button-wa" data-action="whatsapp-report" data-id="${day.id}"><span class="quick-icon">📱</span>Compartir por WhatsApp</button>
+      <button class="quick-button quick-button-wa" data-action="whatsapp-report" data-id="${day.id}"><span class="quick-icon">${icon('report')}</span>Compartir por WhatsApp</button>
       <button class="quick-button" data-action="copy-report" data-id="${day.id}"><span class="quick-icon">${icon('report')}</span>Copiar resumen para WhatsApp</button>
       ${!day.closedAt ? `<button class="quick-button" data-action="day-notes" data-id="${day.id}"><span class="quick-icon">${icon('report')}</span>Observaciones del día</button>` : ''}
       <div class="day-info">

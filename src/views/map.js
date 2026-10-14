@@ -8,19 +8,11 @@ import {
 } from '../utils.js';
 import { stateStore, selectedDay, allActivities, amount, catalogSectors } from '../state.js';
 
-const GRID_STEP_M = 10;      // separación de la grilla de fondo (m)
-const MAX_AXIS_LABELS = 6;   // máximo de etiquetas PK visibles en el eje
+const GRID_STEP_M = 10; // separación exacta de 10 en 10 metros
 
 const pkLabel = m => `${Math.floor(m / 1000)}+${String(Math.round(m % 1000)).padStart(3, '0')}`;
 
 const hasPk = a => sectorUsesPk(a.sector) && pkNumber(a.pkStart) !== null && pkNumber(a.pkEnd) !== null;
-
-/** Paso "redondo" para las etiquetas del eje según la distancia visible. */
-function labelStep(distance) {
-  const raw = distance / MAX_AXIS_LABELS;
-  const nice = [10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000];
-  return nice.find(n => n >= raw) || Math.ceil(raw / 1000) * 1000;
-}
 
 export function renderMap() {
   const project = normalizeProjectId(selectedDay()?.project || stateStore.state?.settings?.project);
@@ -48,38 +40,46 @@ export function renderMap() {
     .sort((a, b) => String(a.createdAt ?? '').localeCompare(String(b.createdAt ?? '')));
 
   // Rango visible del eje
-  const bounds = relevant.flatMap(a => [pkNumber(a.pkStart), pkNumber(a.pkEnd)]);
-  const minBound = bounds.length ? Math.min(...bounds) : 1210;
-  const maxBound = bounds.length ? Math.max(...bounds) : 1310;
+  const bounds = relevant.flatMap(a => [pkNumber(a.pkStart), pkNumber(a.pkEnd)]).filter(n => n !== null && !isNaN(n));
+  const minBound = bounds.length ? Math.min(...bounds) : 1170;
+  const maxBound = bounds.length ? Math.max(...bounds) : 1270;
   const start = Math.floor(minBound / GRID_STEP_M) * GRID_STEP_M;
   const end = Math.max(Math.ceil(maxBound / GRID_STEP_M) * GRID_STEP_M, start + GRID_STEP_M);
-  const distance = end - start;
+  const distance = Math.max(GRID_STEP_M, end - start);
   const pct = m => ((m - start) / distance) * 100;
 
-  const step = labelStep(distance);
+  // Generación estricta de 10 en 10 metros
   const ticks = [];
-  for (let t = Math.ceil(start / step) * step; t <= end; t += step) ticks.push(t);
-  if (ticks[0] !== start) ticks.unshift(start);
-  if (ticks.at(-1) !== end) ticks.push(end);
-  // Evita etiquetas pegadas en los extremos
-  const minGapPct = 9;
-  const visibleTicks = ticks.filter((t, i, arr) =>
-    i === 0 || i === arr.length - 1 ||
-    (pct(t) - pct(arr[0]) >= minGapPct && pct(arr.at(-1)) - pct(t) >= minGapPct));
+  for (let t = start; t <= end; t += GRID_STEP_M) {
+    ticks.push(t);
+  }
 
-  const axisHtml = visibleTicks.map((t, i, arr) => {
-    const edge = i === 0 ? 'axis-start' : i === arr.length - 1 ? 'axis-end' : '';
-    return `<span class="map-tick ${edge}" style="left:${pct(t).toFixed(3)}%">${pkLabel(t)}</span>`;
+  // Ancho mínimo del riel: 42px por cada marca de 10m para garantizar legibilidad total
+  const trackWidthPx = Math.max(500, (ticks.length - 1) * 44);
+  const totalSurfaceWidth = trackWidthPx + 140;
+
+  const axisHtml = ticks.map((t, i) => {
+    const isMajor = t % 100 === 0;
+    const isMid = t % 50 === 0 && !isMajor;
+    const cls = isMajor ? 'tick-major' : isMid ? 'tick-mid' : 'tick-minor';
+    return `<span class="map-tick ${cls}" style="left:${pct(t).toFixed(4)}%">
+      <span class="tick-line"></span>
+      <span class="tick-text">${pkLabel(t)}</span>
+    </span>`;
   }).join('');
 
-  const gridPct = ((GRID_STEP_M / distance) * 100).toFixed(4);
-  const trackStyle = `--grid:${gridPct}%`;
+  const gridPct = ((GRID_STEP_M / distance) * 100).toFixed(5);
+  const trackStyle = `--grid:${gridPct}%; width:${trackWidthPx}px; min-width:${trackWidthPx}px;`;
 
   const rowsHtml = relevant.map(a => {
     const overall = getActivityStatus(a);
-    const left = Math.max(0, pct(pkNumber(a.pkStart)));
-    const width = Math.min(Math.max(1.2, pct(pkNumber(a.pkEnd)) - pct(pkNumber(a.pkStart))), 100 - left);
-    const title = `${a.activity} · PK ${a.pkStart} a ${a.pkEnd} · ${amount(a)} · ${overall} (Lab: ${getControlStatus(a, 'Laboratorio')}, Topo: ${getControlStatus(a, 'Topografía')})`;
+    const pks = pkNumber(a.pkStart);
+    const pke = pkNumber(a.pkEnd);
+    const pMin = Math.min(pks, pke);
+    const pMax = Math.max(pks, pke);
+    const left = Math.max(0, pct(pMin));
+    const width = Math.min(Math.max(1.2, ((pMax - pMin) / distance) * 100), 100 - left);
+    const title = `${a.activity} · PK ${a.pkStart} a ${a.pkEnd} · ${amount(a)} · ${overall}`;
     return `<div class="map-row">
       <div class="map-row-label">
         <strong>${esc(a.activity)}</strong>
@@ -87,7 +87,7 @@ export function renderMap() {
       </div>
       <div class="map-track" style="${trackStyle}">
         <button class="map-segment ${statusClass(overall)} ${activityStage(a) === 'En curso' ? 'in-progress' : ''}"
-          style="left:${left.toFixed(3)}%;width:${width.toFixed(3)}%"
+          style="left:${left.toFixed(4)}%;width:${width.toFixed(4)}%"
           data-action="detail" data-id="${esc(a.id)}" data-day-id="${esc(a.day.id)}"
           title="${esc(title)}" aria-label="${esc(title)}">${esc(amount(a))}</button>
       </div>
@@ -98,7 +98,7 @@ export function renderMap() {
     <div>
       <div class="eyebrow">MONOGRAFÍA DE AVANCES</div>
       <h1>Tramos y capas</h1>
-      <p>Ubicación de los registros por PK, proceso y actividad.</p>
+      <p>Visualización lineal de avances por eje, PK y capa.</p>
     </div>
   </div>
   <div class="filters filters-grid">
@@ -116,16 +116,24 @@ export function renderMap() {
     </label>
   </div>
   <div class="map-card">
-    <div class="section-head">
-      <h2>${esc(sector || 'Sin sector')}</h2>
-      <span class="muted">${relevant.length} registros</span>
+    <div class="section-head" style="flex-wrap:wrap;gap:8px">
+      <div>
+        <h2>${esc(sector || 'Sin sector')}</h2>
+        <span class="muted">PK ${pkLabel(start)} a PK ${pkLabel(end)} · Longitud: ${distance} m · Grilla cada 10 m</span>
+      </div>
+      <span class="badge dark">${relevant.length} registros</span>
     </div>
     ${relevant.length ? `
-      <div class="map-surface">
-        <div class="map-axis-row"><div class="map-row-label map-axis-spacer"></div><div class="map-axis">${axisHtml}</div></div>
-        ${rowsHtml}
+      <div class="map-scroll-container">
+        <div class="map-surface" style="width:${totalSurfaceWidth}px; min-width:${totalSurfaceWidth}px;">
+          <div class="map-axis-row">
+            <div class="map-row-label map-axis-spacer"><span>PK / Actividad</span></div>
+            <div class="map-axis" style="width:${trackWidthPx}px; min-width:${trackWidthPx}px;">${axisHtml}</div>
+          </div>
+          ${rowsHtml}
+        </div>
       </div>
-      <p class="hint">Toca una barra para ver el detalle. Grilla de fondo cada ${GRID_STEP_M} m.</p>` :
+      <p class="hint">Desliza horizontalmente para recorrer toda la longitud de la traza. Intervalos fijados de 10 en 10 metros.</p>` :
       empty('Todavía no hay avances en este tramo', 'Los registros con PK aparecerán aquí después de guardarlos.')}
     <div class="legend">
       <span><i></i>Pendiente</span>
