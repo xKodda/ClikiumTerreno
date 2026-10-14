@@ -4,7 +4,7 @@
 
 import {
   esc, dateLabel, icon, empty, statusClass, badge, controlBadges,
-  layerLabel, activityStage, getActivityStatus, getControlStatus, sectorUsesPk
+  layerLabel, activityStage, getActivityStatus, getControlStatus, sectorUsesPk, cmpDesc
 } from '../utils.js';
 import { stateStore, selectedDay, allActivities, amount } from '../state.js';
 
@@ -28,10 +28,12 @@ export function pendingActivityCard(a) {
       <span>${pkLabel}</span>
       <span class="quantity">${amount(a)}</span>
     </div>
-    <div class="card-bottom">
-      <span class="meta">Jornada: ${esc(dateLabel(day.date))} · ${a.controls.length} controles registrados</span>
-      <button class="btn btn-sm btn-primary" data-action="add-control" data-id="${a.id}" data-day-id="${day.id}">+ Agregar control</button>
-      <button class="text-button" data-action="detail" data-id="${a.id}" data-day-id="${day.id}">Ver historial</button>
+    <div class="card-bottom card-bottom-wrap">
+      <span class="meta">${a.controls.length} controles registrados</span>
+      <div class="card-actions">
+        <button class="text-button" data-action="detail" data-id="${a.id}" data-day-id="${day.id}">Ver historial</button>
+        <button class="btn btn-sm btn-primary" data-action="add-control" data-id="${a.id}" data-day-id="${day.id}">+ Control</button>
+      </div>
     </div>
   </article>`;
 }
@@ -44,12 +46,12 @@ export function renderPending() {
   const allPendingActs = allActs.filter(a => {
     const st = getActivityStatus(a);
     return st === 'Control pendiente' || st === 'Rechazado';
-  }).sort((a, b) => b.day.date.localeCompare(a.day.date) || b.createdAt.localeCompare(a.createdAt));
+  }).sort((a, b) => cmpDesc(a.day.date, b.day.date) || cmpDesc(a.createdAt, b.createdAt));
 
   const curPendingActs = curActs.filter(a => {
     const st = getActivityStatus(a);
     return st === 'Control pendiente' || st === 'Rechazado';
-  }).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }).sort((a, b) => cmpDesc(a.createdAt, b.createdAt));
 
   const isScopeToday = stateStore.pendingScope === 'today' && !!curDay;
   const pendingActs = isScopeToday ? curPendingActs : allPendingActs;
@@ -69,7 +71,7 @@ export function renderPending() {
   }
 
   const scopeHtml = curDay ? `
-    <div class="scope-toggle" style="margin-bottom:16px;display:flex;gap:10px;flex-wrap:wrap">
+    <div class="scope-toggle">
       <button class="btn ${isScopeToday ? 'btn-primary' : 'btn-secondary'}" data-action="filter-pending-scope" data-scope="today">
         ${icon('day')} Esta jornada (${curPendingActs.length})
       </button>
@@ -80,7 +82,7 @@ export function renderPending() {
 
   return `<div class="heading">
     <div>
-      <div class="eyebrow">${isScopeToday ? `JORNADA ACTUAL · ${esc(curDay.date)} · ${esc(curDay.user)}` : 'SEGUIMIENTO MULTI-JORNADA'}</div>
+      <div class="eyebrow">${isScopeToday ? 'JORNADA ACTUAL' : 'SEGUIMIENTO MULTI-JORNADA'}</div>
       <h1>${isScopeToday ? 'Pendientes de esta jornada' : 'Pendientes y rechazos abiertos'}</h1>
       <p>${isScopeToday ? 'Controles pendientes de los avances registrados en la jornada seleccionada.' : 'Controles de calidad pendientes acumulados de jornadas anteriores y actuales.'}</p>
     </div>
@@ -92,7 +94,7 @@ export function renderPending() {
     <div class="stat"><div class="stat-label">Pendiente Laboratorio</div><div class="stat-value">${totalLabPending}<small>ensayos</small></div><div class="stat-note">Densidad / humedad</div></div>
     <div class="stat"><div class="stat-label">Pendiente Topografía</div><div class="stat-value">${totalTopPending}<small>controles</small></div><div class="stat-note">Cotas / geometría</div></div>
   </div>
-  <div class="filters">
+  <div class="filters filter-chips">
     <button class="btn ${stateStore.pendingTabFilter === 'all' ? 'btn-primary' : 'btn-secondary'}" data-action="filter-pending-tab" data-tab="all">Todos (${totalPending})</button>
     <button class="btn ${stateStore.pendingTabFilter === 'rejected' ? 'btn-primary' : 'btn-secondary'}" data-action="filter-pending-tab" data-tab="rejected">Rechazados (${totalRejected})</button>
     <button class="btn ${stateStore.pendingTabFilter === 'lab' ? 'btn-primary' : 'btn-secondary'}" data-action="filter-pending-tab" data-tab="lab">Laboratorio (${totalLabPending})</button>

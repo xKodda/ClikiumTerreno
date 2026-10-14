@@ -134,8 +134,26 @@ export const capatazField = () => {
   return `<label class="field"><span>Capataz</span><select name="userId" required>${capataces.map(p => `<option value="${esc(p.id)}" selected>${esc(p.nombre)}</option>`).join('')}</select></label>`;
 };
 
+const FALLBACK_SECTOR_GROUPS = [
+  { grupo: 'Ejes', sectores: ['Eje 48'] },
+  { grupo: 'Otros', sectores: ['Botadero', 'Acopio'] }
+];
+
+/** Grupos de sectores del catálogo, con respaldo si el catálogo aún no carga (offline). */
+export const catalogSectorGroups = () => {
+  const cat = stateStore.catalog || {};
+  if (Array.isArray(cat.gruposSectores) && cat.gruposSectores.some(g => g.sectores?.length)) {
+    return cat.gruposSectores.filter(g => g.sectores?.length);
+  }
+  if (Array.isArray(cat.sectores) && cat.sectores.length) return [{ grupo: 'Sectores', sectores: cat.sectores }];
+  return FALLBACK_SECTOR_GROUPS;
+};
+
+/** Lista plana de sectores del catálogo. */
+export const catalogSectors = () => catalogSectorGroups().flatMap(g => g.sectores);
+
 export const sectorSelect = value => {
-  const groups = stateStore.catalog.gruposSectores || [{ grupo: 'Sectores', sectores: stateStore.catalog.sectores }];
+  const groups = catalogSectorGroups();
   const known = new Set(groups.flatMap(g => g.sectores));
   const extra = value && !known.has(value) ? `<option value="${esc(value)}" selected>${esc(value)}</option>` : '';
   const optgroups = groups.map(g => `<optgroup label="${esc(g.grupo)}">${g.sectores.map(s => option(s, value)).join('')}</optgroup>`).join('');

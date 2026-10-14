@@ -70,7 +70,16 @@ export function render() {
     report: renderReport
   }[stateStore.view] || renderDay;
 
-  $('#main').innerHTML = renderer();
+  try {
+    $('#main').innerHTML = renderer();
+  } catch (error) {
+    console.error(`Error al renderizar la vista "${stateStore.view}":`, error);
+    $('#main').innerHTML = `<div class="connection-error">
+      <h2>No se pudo mostrar esta sección.</h2>
+      <p class="muted">${esc(error?.message || 'Error inesperado')}</p>
+      <button class="btn btn-primary" data-action="navigate" data-view="today">Volver a la jornada</button>
+    </div>`;
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -493,11 +502,17 @@ document.addEventListener('submit', async event => {
 import { loadState } from './data/sync.js';
 import { checkSession, signInWithOtp, verifyOtp, signInWithPassword, signOut } from './data/auth.js';
 
+const CATALOG_CACHE_KEY = 'clikium_catalog_cache';
+
 async function load() {
   const cachedLocal = localStorage.getItem('clikium_terreno_state_cache');
   const pendingLocal = localStorage.getItem('clikium_terreno_pending_state');
   const savedDayId = localStorage.getItem('clikium_selected_day_id');
   if (savedDayId) stateStore.selectedDayId = savedDayId;
+  try {
+    const cachedCatalog = JSON.parse(localStorage.getItem(CATALOG_CACHE_KEY) || 'null');
+    if (cachedCatalog) stateStore.catalog = { ...stateStore.catalog, ...cachedCatalog };
+  } catch (e) {}
 
   if (pendingLocal) {
     try {
@@ -735,6 +750,7 @@ async function load() {
     const result = await loadState();
     
     stateStore.catalog = result.catalog;
+    try { localStorage.setItem(CATALOG_CACHE_KEY, JSON.stringify(result.catalog)); } catch (e) {}
     stateStore.version = result.version;
     stateStore.media = result.media;
     stateStore.remoteState = structuredClone(result.state);

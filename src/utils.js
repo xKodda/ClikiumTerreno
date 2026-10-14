@@ -220,6 +220,22 @@ export const primary = (action, text, id = '') => `<button class="btn btn-primar
 
 export const empty = (title, text, action = '') => `<div class="empty"><div class="empty-icon">${icon('day')}</div><h2>${title}</h2><p>${text}</p>${action}</div>`;
 
+/** Comparador descendente seguro ante valores nulos (fechas ISO / strings). */
+export const cmpDesc = (a, b) => String(b ?? '').localeCompare(String(a ?? ''));
+
+/**
+ * Tabla responsiva: en escritorio es una tabla normal; en móvil cada fila
+ * se convierte en una tarjeta con etiquetas (data-label), sin scroll horizontal.
+ * @param {string[]} headings
+ * @param {string[][]} rows  celdas ya escapadas (HTML)
+ * @param {string} [footer]  fila <tr> opcional para <tfoot>
+ */
+export const dataTable = (headings, rows, footer = '') => `<div class="table-wrap"><table class="data-table">
+  <thead><tr>${headings.map(h => `<th>${h}</th>`).join('')}</tr></thead>
+  <tbody>${rows.map(cells => `<tr>${cells.map((c, i) => `<td data-label="${esc(headings[i] || '')}">${c}</td>`).join('')}</tr>`).join('')}</tbody>
+  ${footer ? `<tfoot>${footer}</tfoot>` : ''}
+</table></div>`;
+
 let toastTimer = null;
 export function toast(message) {
   const el = $('#toast');

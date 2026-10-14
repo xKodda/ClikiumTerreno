@@ -2,13 +2,14 @@
 // CLIKIUM TERRENO — VISTA: HISTORIAL (ES MODULE)
 // ============================================================================
 
-import { esc, dateLabel, icon, empty, getActivityStatus } from '../utils.js';
+import { esc, dateLabel, icon, empty, getActivityStatus, cmpDesc, projectDisplayName } from '../utils.js';
 import { stateStore } from '../state.js';
 
 export function renderHistory() {
-  const days = [...stateStore.state.days]
-    .filter(d => (!stateStore.historyMonth || d.date.startsWith(stateStore.historyMonth)) && (!stateStore.historySearch || JSON.stringify(d).toLowerCase().includes(stateStore.historySearch.toLowerCase())))
-    .sort((a, b) => b.date.localeCompare(a.date) || b.startedAt.localeCompare(a.startedAt));
+  const search = stateStore.historySearch.toLowerCase();
+  const days = [...(stateStore.state?.days || [])]
+    .filter(d => (!stateStore.historyMonth || String(d.date).startsWith(stateStore.historyMonth)) && (!search || JSON.stringify(d).toLowerCase().includes(search)))
+    .sort((a, b) => cmpDesc(a.date, b.date) || cmpDesc(a.startedAt, b.startedAt));
 
   return `<div class="heading">
     <div>
@@ -26,7 +27,7 @@ export function renderHistory() {
   <div class="history-grid">
     ${days.map(d => `<button class="history-card" data-action="open-day" data-id="${d.id}">
       <div class="card-top">
-        <span class="card-sector">${esc(d.project)}${d.isDemo ? ' · EJEMPLO' : ''}</span>
+        <span class="card-sector">${esc(projectDisplayName(d.project))}${d.isDemo ? ' · EJEMPLO' : ''}</span>
         <span class="badge ${d.closedAt ? 'approved' : 'pending'}">${d.closedAt ? 'Cerrada' : 'Abierta'}</span>
       </div>
       <h3>${esc(dateLabel(d.date))}</h3>

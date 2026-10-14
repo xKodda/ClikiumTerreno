@@ -65,12 +65,14 @@ export async function loadState() {
     ? machines.map(m => ({ name: m.name, operator: m.operator }))
     : defaultMachines;
 
+  const sectorRows = sectors || [];
   const catalog = {
     capataces: catalogCapataces,
-    gruposSectores: Array.from(new Set((sectors || []).map(s => s.group_name))).map(g => ({
+    gruposSectores: Array.from(new Set(sectorRows.map(s => s.group_name))).map(g => ({
       grupo: g,
-      sectores: (sectors || []).filter(s => s.group_name === g).map(s => s.name)
+      sectores: sectorRows.filter(s => s.group_name === g).map(s => s.name)
     })),
+    sectores: sectorRows.map(s => s.name),
     trabajadores: (workers || []).map(w => ({ name: w.name, role: w.role })),
     maquinarias: dbMachines.length > 0 ? dbMachines : defaultMachines
   };
