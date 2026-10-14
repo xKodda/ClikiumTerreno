@@ -5,7 +5,7 @@
 import {
   esc, num, today, dateLabel, timeOnly, icon, primary, empty,
   statusClass, badge, controlBadges, layerLabel, activityStage,
-  getActivityStatus, findAssignedActivity, sectorUsesPk
+  getActivityStatus, findAssignedActivity, sectorUsesPk, getMachineForOperator, nameKey
 } from '../utils.js';
 import { stateStore, selectedDay, amount } from '../state.js';
 
@@ -16,10 +16,15 @@ export function activityCard(a, day) {
     : `<strong>Ubicación por sector</strong>`;
   const actCrew = day.crew.filter(p => findAssignedActivity(p, day)?.id === a.id);
   const actMachines = day.machines.filter(m => findAssignedActivity(m, day)?.id === a.id);
+  const operatorMachines = actCrew.map(p => getMachineForOperator(p.name, day, stateStore.catalog?.maquinarias)?.name).filter(Boolean);
+  const allMachines = [...new Set([...actMachines.map(m => m.name), ...operatorMachines])];
   const actHh = actCrew.reduce((n, p) => n + p.hours + p.extra, 0);
   const crewPill = actCrew.length
-    ? `<span class="activity-crew-pill">Cuadrilla: ${actCrew.length} pers. (${num(actHh)} HH)${actMachines.length ? ' · Equipos: ' + actMachines.map(m => esc(m.name)).join(', ') : ''}</span>`
-    : (!day.closedAt ? `<button type="button" class="crew-shortcut" data-action="assign-crew" data-id="${a.id}" data-day-id="${day.id}">+ Asignar cuadrilla</button>` : '');
+    ? `<span class="activity-crew-pill">Cuadrilla: ${actCrew.length} pers. (${num(actHh)} HH)${allMachines.length ? ' · Equipos: ' + allMachines.map(m => esc(m)).join(', ') : ''}</span>`
+    : '';
+  const crewBtn = !day.closedAt
+    ? `<button type="button" class="crew-shortcut" data-action="assign-crew" data-id="${a.id}" data-day-id="${day.id}">+ ${actCrew.length ? 'Sumar personal' : 'Asignar cuadrilla'}</button>`
+    : '';
 
   return `<article class="activity-card ${statusClass(overall)}">
     <div class="card-top">
@@ -31,6 +36,7 @@ export function activityCard(a, day) {
         <div class="control-tags" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
           ${controlBadges(a)}
           ${crewPill}
+          ${crewBtn}
         </div>
       </div>
       ${badge(overall)}
@@ -115,7 +121,7 @@ export function renderDay() {
       ${vOtros ? `<div class="stat-note">+ ${num(vOtros)} m³ otros trabajos</div>` : '<div class="stat-note">Cantidades separadas por actividad</div>'}
     </div>
     <div class="stat"><div class="stat-label">Control pendiente</div><div class="stat-value">${pending}<small>registros</small></div><div class="stat-note">${rejected} rechazados · ${approved} aprobados${completed ? ` · ${completed} completos` : ''}${annulledCount ? ` · ${annulledCount} anuladas` : ''}</div></div>
-    <div class="stat"><div class="stat-label">Horas hombre</div><div class="stat-value">${num(hh)}<small>HH</small></div><div class="stat-note">${day.crew.length} personas · sin duplicar</div></div>
+    <div class="stat"><div class="stat-label">Horas hombre</div><div class="stat-value">${num(hh)}<small>HH</small></div><div class="stat-note">${new Set(day.crew.map(p => nameKey(p.name))).size} personas en faena</div></div>
   </div>
   <div class="activity-layout">
     <section>

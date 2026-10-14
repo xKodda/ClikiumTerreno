@@ -5,11 +5,12 @@
 import {
   $, esc, num, uid, now, today, dateLabel, timeOnly, icon, toast,
   sectorUsesPk, pkNumber, normalizePk, nameKey, statusClass, badge, controlBadges,
-  layerLabel, activityStage, getActivityStatus, getControlStatus,
+  layerLabel, activityLabel, activityStage, getActivityStatus, getControlStatus,
   requiredControlsLabel, findAssignedActivity, textarea,
   projectDisplayName, normalizeProjectId,
   formatActivityMeta, parseActivityMeta, isLayerActivity, isLoadingActivity,
-  isLoadingOnlyActivity, isTransferActivity, isDirectMeasurementActivity, getDefaultUnit
+  isLoadingOnlyActivity, isTransferActivity, isDirectMeasurementActivity, getDefaultUnit,
+  getMachineForOperator
 } from './utils.js';
 
 import {
@@ -20,7 +21,7 @@ import {
 
 import {
   modal, showDialog, startForm, activityForm, resourceForm, multiPersonForm,
-  copyYesterdayCrewForm, controlForm, annulForm, updateActivityForm, updateQuantityForm,
+  renderMultiPersonWorkerList, copyYesterdayCrewForm, controlForm, annulForm, updateActivityForm, updateQuantityForm,
   updateSectorForm, updateLayerForm, repeatPreviousActivity, detail, demo
 } from './dialogs.js';
 
@@ -28,7 +29,7 @@ import { renderDay } from './views/day.js';
 import { renderPending } from './views/pending.js';
 import { renderResources } from './views/resources.js';
 import { renderHistory } from './views/history.js';
-import { renderMap } from './views/map.js';
+import { renderMap, openMapModal } from './views/map.js';
 import { renderReport, reportText } from './views/report.js';
 import { renderBackup } from './views/backup.js';
 
@@ -111,6 +112,8 @@ document.addEventListener('click', async event => {
     if (action === 'filter-pending-tab') { stateStore.pendingTabFilter = button.dataset.tab; render(); return; }
     if (action === 'filter-pending-scope') { stateStore.pendingScope = button.dataset.scope; render(); return; }
     if (action === 'navigate') { stateStore.view = button.dataset.view; render(); return; }
+    if (action === 'set-map-view') { stateStore.mapViewMode = button.dataset.mode; render(); return; }
+    if (action === 'open-map-modal') return openMapModal();
     if (action === 'backup-view') { stateStore.view = 'backup'; render(); return; }
     if (action === 'start-day') return startForm();
     if (action === 'add-activity') return activityForm(id);
@@ -250,8 +253,19 @@ document.addEventListener('change', event => {
     }
   }
   if (id === 'multi-activity-select') {
-    const asgInput = $('#multi-default-assignment');
-    if (asgInput) { asgInput.value = event.target.value; }
+    const selActId = event.target.value;
+    const day = selectedDay();
+    const targetAct = day?.activities.find(a => a.id === selActId);
+    const form = event.target.closest('form');
+    if (form) {
+      form.dataset.activityId = selActId;
+      const asgInput = $('#multi-default-assignment');
+      if (asgInput) { asgInput.value = targetAct ? activityLabel(targetAct) : ''; }
+      const grid = $('#multi-workers-grid');
+      if (grid && day) {
+        grid.innerHTML = renderMultiPersonWorkerList(day, selActId);
+      }
+    }
   }
   if (id === 'history-month') { stateStore.historyMonth = event.target.value; render(); }
   if (id === 'map-sector') { stateStore.mapSector = event.target.value; render(); }
@@ -458,16 +472,22 @@ document.addEventListener('submit', async event => {
 
       } else if (type === 'person' || type === 'machine') {
         const person = type === 'person';
+        const nameVal = val('name');
+        const asgVal = val('assignment');
+        const actLink = val('activity_link') || '';
+        const targetAct = day.activities.find(a => (form.dataset.activityId && a.id === form.dataset.activityId) || activityLabel(a) === asgVal || activityLabel(a) === actLink);
+        const finalAsg = asgVal || (targetAct ? activityLabel(targetAct) : actLink);
+
         if (person) {
-          const nameVal = val('name');
-          const existingPerson = day.crew.find(r => r.id !== form.dataset.recordId && nameKey(r.name) === nameKey(nameVal));
-          if (existingPerson) throw new Error(`La persona "${nameVal}" ya está registrada en la cuadrilla de hoy. Modifica su registro existente para ajustar la asignación y evitar duplicar sus HH.`);
+          const existingSameAct = day.crew.find(r => r.id !== form.dataset.recordId && nameKey(r.name) === nameKey(nameVal) && ((targetAct && r.activityId === targetAct.id) || (finalAsg && nameKey(r.assignment) === nameKey(finalAsg))));
+          if (existingSameAct) throw new Error(`La persona "${nameVal}" ya está asignada a este trabajo. Modifica su registro existente para ajustar las horas.`);
         }
         if (number('hours') + number(person ? 'extra' : 'standby') > 24) throw new Error('La suma de horas no puede superar 24 h por día.');
         const list = person ? day.crew : day.machines;
         const existing = list.find(r => r.id === form.dataset.recordId);
         const record = {
-          id: existing?.id || uid(), name: val('name'), assignment: val('assignment'), hours: number('hours'),
+          id: existing?.id || uid(), name: nameVal, assignment: finalAsg, hours: number('hours'),
+          activityId: targetAct?.id || existing?.activityId || null,
           ...(person ? { role: val('role'), extra: number('extra') } : { operator: val('operator'), standby: number('standby') })
         };
         if (existing) Object.assign(existing, record); else list.push(record);
@@ -475,16 +495,39 @@ document.addEventListener('submit', async event => {
       } else if (type === 'multi-person') {
         const checkboxes = form.querySelectorAll('input[name="selected_workers"]:checked:not(:disabled)');
         if (!checkboxes.length) throw new Error('Selecciona al menos un trabajador para ingresar.');
-        const h = number('default_hours'), ex = number('default_extra'), asg = val('default_assignment');
+        const h = number('default_hours'), ex = number('default_extra');
+        const actLink = form.elements.activity_link?.value || '';
+        const targetActId = actLink || form.dataset.activityId || '';
+        const targetAct = day.activities.find(a => a.id === targetActId) || day.activities.find(a => activityLabel(a) === actLink);
+        const asgInput = val('default_assignment');
+        const asg = asgInput || (targetAct ? activityLabel(targetAct) : 'General');
+        const actIdToSave = targetAct?.id || null;
+
         if (h + ex > 24) throw new Error('La suma de horas no puede superar 24 h por día.');
         let added = 0;
         for (const cb of checkboxes) {
           const wName = cb.value;
-          if (day.crew.some(p => nameKey(p.name) === nameKey(wName))) continue;
-          day.crew.push({ id: uid(), name: wName, role: cb.dataset.role || 'M1', hours: h, extra: ex, assignment: asg });
+          // Validar que no esté ya asignado a esta misma actividad
+          const alreadyInThis = day.crew.some(p =>
+            nameKey(p.name) === nameKey(wName) && (
+              (actIdToSave && p.activityId === actIdToSave) ||
+              (asg && nameKey(p.assignment) === nameKey(asg))
+            )
+          );
+          if (alreadyInThis) continue;
+
+          day.crew.push({
+            id: uid(),
+            name: wName,
+            role: cb.dataset.role || 'M1',
+            hours: h,
+            extra: ex,
+            assignment: asg,
+            activityId: actIdToSave
+          });
           added++;
         }
-        toast(`Se agregaron ${added} trabajadores a la cuadrilla.`);
+        toast(`Se asignaron ${added} trabajadores a la actividad.`);
 
       } else if (type === 'copy-crew') {
         const workerCbs = form.querySelectorAll('input[name="copy_crew"]:checked:not(:disabled)');

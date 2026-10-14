@@ -775,5 +775,127 @@ dialog#modal::backdrop {
   }
 }
 
+/* ==========================================================================
+   Tramos y Capas — Responsive ordenado y Monografía
+   ========================================================================== */
+.map-view-toggle {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.map-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.map-card-item {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 18px 20px;
+  border-left: 4px solid #f0bf63;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.map-card-item.approved { border-left-color: #3d9772; }
+.map-card-item.rejected { border-left-color: #c45d5d; }
+.map-card-item.no-control { border-left-color: #3b82f6; }
+
+.map-card-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.map-card-item-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 4px 0 2px;
+  color: #0f172a;
+}
+.map-card-item-sector {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: 0.03em;
+}
+.map-card-item-sub {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.map-mini-track-wrapper {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+.map-mini-track-bounds {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  color: #64748b;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.map-mini-track-bar {
+  position: relative;
+  height: 24px;
+  background: #e2e8f0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.map-mini-track-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 3px;
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 4px;
+}
+.map-mini-track-fill.approved {
+  background: #ecfdf5;
+  color: #065f46;
+  border-color: #a7f3d0;
+}
+.map-mini-track-fill.rejected {
+  background: #fef2f2;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+.map-mini-track-fill.no-control {
+  background: #eff6ff;
+  color: #1e40af;
+  border-color: #bfdbfe;
+}
+.map-card-item-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 10px;
+}
+.map-modal-surface {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 12px;
+}
+
 
 

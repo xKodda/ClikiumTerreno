@@ -2,7 +2,7 @@
 // CLIKIUM TERRENO — VISTA: RECURSOS (ES MODULE)
 // ============================================================================
 
-import { esc, num, icon, primary, empty, activityLabel, findAssignedActivity, dataTable, cmpDesc } from '../utils.js';
+import { esc, num, icon, primary, empty, activityLabel, findAssignedActivity, dataTable, cmpDesc, getMachineForOperator, nameKey } from '../utils.js';
 import { stateStore, selectedDay } from '../state.js';
 
 const assignmentBadge = (record, day) => {
@@ -29,12 +29,16 @@ export function renderResources() {
 
   const crewTable = dataTable(
     ['Persona / cargo', 'Asignación', 'Horas', 'Extras', 'HH', ''],
-    day.crew.map(p => [
-      `<strong>${esc(p.name)}</strong><br><span class="muted">${esc(p.role)}</span>`,
-      assignmentBadge(p, day),
-      num(p.hours), num(p.extra), `<strong>${num(p.hours + p.extra)}</strong>`,
-      open ? `<button class="text-button" data-action="edit-person" data-id="${esc(p.id)}" data-day-id="${esc(day.id)}">Editar</button>` : ''
-    ])
+    day.crew.map(p => {
+      const opMach = getMachineForOperator(p.name, day, stateStore.catalog?.maquinarias);
+      const roleText = `${esc(p.role)}${opMach ? ` · ${esc(opMach.name)}` : ''}`;
+      return [
+        `<strong>${esc(p.name)}</strong><br><span class="muted">${roleText}</span>`,
+        assignmentBadge(p, day),
+        num(p.hours), num(p.extra), `<strong>${num(p.hours + p.extra)}</strong>`,
+        open ? `<button class="text-button" data-action="edit-person" data-id="${esc(p.id)}" data-day-id="${esc(day.id)}">Editar</button>` : ''
+      ];
+    })
   );
 
   const machineTable = dataTable(
@@ -61,7 +65,10 @@ export function renderResources() {
       </div>
     </div>
     ${day.crew.length ? crewTable : '<p class="muted">Agrega la cuadrilla y sus horas efectivas. Se suman las HH automáticamente.</p>'}
-    <div class="resource-total">Total: <strong>${num(hh)} HH</strong> (${day.crew.length} pers.) · Asignadas: <strong>${num(assignedHh)} HH</strong> (${assignedCrew.length} pers.) · Extra: <strong>${num(extra)} h</strong></div>
+    ${(() => {
+      const uniqueWorkers = new Set(day.crew.map(p => nameKey(p.name))).size;
+      return `<div class="resource-total">Total: <strong>${num(hh)} HH</strong> (${uniqueWorkers} trabajadores en faena${day.crew.length > uniqueWorkers ? ` · ${day.crew.length} asignaciones` : ''}) · Asignadas: <strong>${num(assignedHh)} HH</strong> · Extra: <strong>${num(extra)} h</strong></div>`;
+    })()}
   </section>
   <section class="panel">
     <div class="section-head section-head-wrap">

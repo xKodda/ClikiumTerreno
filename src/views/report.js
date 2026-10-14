@@ -5,12 +5,14 @@
 import {
   esc, num, stamp, icon, empty, badge, controlBadges, layerLabel,
   activityStage, getActivityStatus, getControlStatus, requiredControlsLabel,
-  findAssignedActivity, sectorUsesPk, dataTable, projectDisplayName
+  findAssignedActivity, sectorUsesPk, dataTable, projectDisplayName,
+  getMachineForOperator, nameKey
 } from '../utils.js';
-import { selectedDay, metadata, amount, getMediaUrl } from '../state.js';
+import { stateStore, selectedDay, metadata, amount, getMediaUrl } from '../state.js';
 
 export function reportText(day) {
   const crewTotalHh = day.crew.reduce((n, p) => n + p.hours + (p.extra || 0), 0);
+  const uniqueCrewCount = new Set(day.crew.map(p => nameKey(p.name))).size;
   return [
     `INFORME DIARIO DE TERRENO — CLIKIUM`,
     `PROYECTO: ${projectDisplayName(day.project)}${day.isDemo ? ' · EJEMPLO' : ''}`,
@@ -20,9 +22,11 @@ export function reportText(day) {
     ...day.activities.flatMap((a, i) => {
       const aCrew = day.crew.filter(p => findAssignedActivity(p, day)?.id === a.id);
       const aMach = day.machines.filter(m => findAssignedActivity(m, day)?.id === a.id);
+      const opMachines = aCrew.map(p => getMachineForOperator(p.name, day, stateStore.catalog?.maquinarias)?.name).filter(Boolean);
+      const combinedMachines = [...new Set([...aMach.map(m => m.name), ...opMachines])];
       const aHh = aCrew.reduce((n, p) => n + p.hours + p.extra, 0);
-      const resText = (aCrew.length || aMach.length)
-        ? `Recursos: ${aCrew.length ? `${aCrew.length} personas (${num(aHh)} HH)` : ''}${aCrew.length && aMach.length ? ' · ' : ''}${aMach.length ? `Equipos: ${aMach.map(m => m.name).join(', ')}` : ''}`
+      const resText = (aCrew.length || combinedMachines.length)
+        ? `Recursos: ${aCrew.length ? `${aCrew.length} pers. (${num(aHh)} HH)` : ''}${aCrew.length && combinedMachines.length ? ' · ' : ''}${combinedMachines.length ? `Equipos: ${combinedMachines.join(', ')}` : ''}`
         : '';
       const pkText = (sectorUsesPk(a.sector) && a.pkStart) ? ` · PK ${a.pkStart} a ${a.pkEnd}` : '';
       return [
@@ -38,17 +42,19 @@ export function reportText(day) {
       ].filter(Boolean);
     }),
     '----------------------------------------',
-    `HORAS HOMBRE (HH) POR TRABAJADOR (${day.crew.length} personas · ${num(crewTotalHh)} HH):`,
+    `HORAS HOMBRE (HH) POR TRABAJADOR (${uniqueCrewCount} personas en faena · ${num(crewTotalHh)} HH):`,
     ...day.crew.map(p => {
       const tot = p.hours + (p.extra || 0);
       const extraTxt = p.extra ? ` [${p.hours}h + ${p.extra}h ext]` : '';
       const asigTxt = p.assignment ? ` → Asignación: ${p.assignment}` : ' → General';
-      return `   - ${p.name} (${p.role || 'M1'}): ${num(tot)} HH${extraTxt}${asigTxt}`;
+      const mach = getMachineForOperator(p.name, day, stateStore.catalog?.maquinarias);
+      const machTxt = mach ? ` · Equipo: ${mach.name}` : '';
+      return `   - ${p.name} (${p.role || 'M1'}${machTxt}): ${num(tot)} HH${extraTxt}${asigTxt}`;
     }),
     `   TOTAL HH DEL DÍA: ${num(crewTotalHh)} HH`,
     '----------------------------------------',
-    'MAQUINARIA:',
-    ...day.machines.map(m => `   - ${m.name} (${m.operator}): ${num(m.hours)}h op · ${num(m.standby)}h std-by`),
+    'MAQUINARIA Y OPERADORES:',
+    ...day.machines.map(m => `   - ${m.name} (${m.operator || 'Sin operador'}): ${num(m.hours)}h op · ${num(m.standby)}h std-by${m.assignment ? ' → ' + m.assignment : ''}`),
     day.notes ? `\nObservaciones generales: ${day.notes}` : '',
     '',
     `Emitido desde faena por ${day.user}.`
@@ -93,9 +99,11 @@ export function renderReport() {
     ${day.activities.map((a, i) => {
       const aCrew = day.crew.filter(p => findAssignedActivity(p, day)?.id === a.id);
       const aMach = day.machines.filter(m => findAssignedActivity(m, day)?.id === a.id);
+      const opMachines = aCrew.map(p => getMachineForOperator(p.name, day, stateStore.catalog?.maquinarias)?.name).filter(Boolean);
+      const combinedMachNames = [...new Set([...aMach.map(m => m.name), ...opMachines])];
       const aHh = aCrew.reduce((n, p) => n + p.hours + p.extra, 0);
-      const resSummary = (aCrew.length || aMach.length)
-        ? `<p><strong>Recursos asignados:</strong> ${aCrew.length ? `${aCrew.length} personas (${num(aHh)} HH)` : ''}${aCrew.length && aMach.length ? ' · ' : ''}${aMach.length ? `Equipos: ${aMach.map(m => esc(m.name)).join(', ')}` : ''}</p>`
+      const resSummary = (aCrew.length || combinedMachNames.length)
+        ? `<p><strong>Recursos asignados:</strong> ${aCrew.length ? `${aCrew.length} personas (${num(aHh)} HH)` : ''}${aCrew.length && combinedMachNames.length ? ' · ' : ''}${combinedMachNames.length ? `Equipos: ${combinedMachNames.map(m => esc(m)).join(', ')}` : ''}</p>`
         : '';
       const usesPk = sectorUsesPk(a.sector) && a.pkStart;
       const pkText = usesPk ? ` · PK ${esc(a.pkStart)} a ${esc(a.pkEnd)}` : '';
@@ -122,11 +130,18 @@ export function renderReport() {
         }).join('')}</div>` : ''}
       </section>`;
     }).join('')}
-    ${day.crew.length ? `<h3>Personal y horas hombre (HH)</h3>${dataTable(
-      ['Persona / cargo', 'Asignación', 'Horas', 'Extras', 'Total HH'],
-      day.crew.map(p => [`${esc(p.name)} / ${esc(p.role || 'M1')}`, esc(p.assignment || 'General'), `${num(p.hours)} h`, `${num(p.extra || 0)} h`, `<strong>${num(p.hours + (p.extra || 0))} HH</strong>`]),
-      `<tr class="table-total"><td data-label="">TOTAL (${day.crew.length} personas)</td><td data-label="">—</td><td data-label="Horas">${num(crewHours)} h</td><td data-label="Extras">${num(crewExtra)} h</td><td data-label="Total HH">${num(crewHours + crewExtra)} HH</td></tr>`
-    )}` : ''}
+    ${day.crew.length ? (() => {
+      const uniqueCount = new Set(day.crew.map(p => nameKey(p.name))).size;
+      return `<h3>Personal y horas hombre (HH)</h3>${dataTable(
+        ['Persona / cargo', 'Asignación', 'Horas', 'Extras', 'Total HH'],
+        day.crew.map(p => {
+          const opMach = getMachineForOperator(p.name, day, stateStore.catalog?.maquinarias);
+          const roleDesc = `${esc(p.role || 'M1')}${opMach ? ` · ${esc(opMach.name)}` : ''}`;
+          return [`${esc(p.name)} / ${roleDesc}`, esc(p.assignment || 'General'), `${num(p.hours)} h`, `${num(p.extra || 0)} h`, `<strong>${num(p.hours + (p.extra || 0))} HH</strong>`];
+        }),
+        `<tr class="table-total"><td data-label="">TOTAL (${uniqueCount} ${uniqueCount === 1 ? 'persona' : 'personas'} en cuadrilla)</td><td data-label="">—</td><td data-label="Horas">${num(crewHours)} h</td><td data-label="Extras">${num(crewExtra)} h</td><td data-label="Total HH">${num(crewHours + crewExtra)} HH</td></tr>`
+      )}`;
+    })() : ''}
     ${day.machines.length ? `<h3>Maquinaria</h3>${dataTable(
       ['Equipo', 'Operador', 'Asignación', 'Operación', 'Stand-by'],
       day.machines.map(m => [esc(m.name), esc(m.operator), esc(m.assignment), `${num(m.hours)} h`, `${num(m.standby)} h`])

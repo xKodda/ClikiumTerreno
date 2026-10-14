@@ -321,13 +321,44 @@ export const controlBadges = activity => {
 };
 
 export const findAssignedActivity = (record, day) => {
-  if (!record || !record.assignment || !day || !day.activities) return null;
+  if (!record || !day || !day.activities) return null;
+  if (record.activityId) {
+    const direct = day.activities.find(a => a.id === record.activityId);
+    if (direct) return direct;
+  }
+  if (!record.assignment) return null;
   const asg = nameKey(record.assignment);
   return day.activities.find(a => {
     const lbl = nameKey(activityLabel(a));
     const simpleLbl = nameKey(`${a.sector} · ${a.activity}`);
     return lbl === asg || asg === simpleLbl || asg.startsWith(lbl) || asg.startsWith(simpleLbl);
   }) || null;
+};
+
+export const getMachineForOperator = (operatorName, day, catalog = []) => {
+  if (!operatorName) return null;
+  const k = nameKey(operatorName);
+  const mDay = (day?.machines || []).find(m => nameKey(m.operator) === k);
+  if (mDay) return { name: mDay.name, operator: mDay.operator };
+  const catList = Array.isArray(catalog) ? catalog : [];
+  const mCat = catList.find(m => nameKey(m.operator) === k);
+  if (mCat) return { name: mCat.name, operator: mCat.operator };
+  return null;
+};
+
+export const isLayerPlacement = a => {
+  if (!a || !a.activity) return false;
+  const act = a.activity.toLowerCase();
+  const proc = (a.process || '').toLowerCase();
+  // Strictly exclude carguío and traslado
+  if (act.includes('cargu') || act.includes('traslado') || proc.includes('cargu') || proc.includes('traslado')) {
+    return false;
+  }
+  // Must be real layer / compaction progress
+  const keywords = ['descarga', 'extend', 'perfil', 'compact', 'capa', 'terrapl', 'subrasante', 'base', 'subbase', 'relleno', 'suelo'];
+  const hasKeyword = keywords.some(k => act.includes(k) || proc.includes(k));
+  const hasLayer = Number(a.layer) > 0;
+  return hasKeyword || hasLayer;
 };
 
 export const nameKey = name => String(name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();

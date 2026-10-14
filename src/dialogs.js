@@ -537,34 +537,80 @@ export function resourceForm(dayId, type, recordId = '') {
   showDialog(person ? (recordId ? 'Editar persona' : 'Registrar persona') : (recordId ? 'Editar maquinaria' : 'Registrar maquinaria'), 'Las horas son ingresadas manualmente para esta jornada.', `<div class="form-grid">${input('name', person ? 'Nombre' : 'Equipo / código', record.name, `required maxlength="150" ${person ? 'list="known-people"' : 'list="known-machines"'}`)}${person ? `<datalist id="known-people">${workerCatalog.map(n => `<option value="${esc(n.name)}">${esc(n.name)} (${esc(n.role)})</option>`).join('')}</datalist>` : `<datalist id="known-machines">${machineCatalog.map(m => `<option value="${esc(m.name)}">${esc(m.name)} — Operador: ${esc(m.operator)}</option>`).join('')}</datalist>`}${person ? select('role', 'Cargo', ['M1', 'Operador', 'Carcheck', 'Capataz', 'Supervisor', 'Otro'], record.role) : input('operator', 'Operador', record.operator, 'maxlength="150"')}${input('hours', person ? 'Horas normales efectivas' : 'Horas de operación', record.hours, 'type="number" min="0" max="24" step="0.25" required')}${input(person ? 'extra' : 'standby', person ? 'Horas extra' : 'Stand-by (horas)', person ? record.extra : record.standby, 'type="number" min="0" max="24" step="0.25" required')}${actSelectHtml}<label class="field full"><span>Asignación / motivo de espera</span><input name="assignment" id="single-assignment-input" value="${esc(record.assignment)}" placeholder="Ej.: OA6 capa 7 · excavación / extendido" maxlength="300" list="assignments"><datalist id="assignments">${day.activities.map(a => `<option value="${esc(activityLabel(a))}"></option>`).join('')}</datalist></label></div>`, { form: type, dayId, recordId });
 }
 
+export function renderMultiPersonWorkerList(day, targetActId) {
+  const workerCatalog = stateStore.catalog.trabajadores || [];
+  const targetAct = targetActId ? day.activities.find(a => a.id === targetActId) : null;
+  const defaultAssignment = targetAct ? activityLabel(targetAct) : '';
+
+  const assignedToThisAct = new Set(
+    day.crew
+      .filter(p => (targetActId && p.activityId === targetActId) || (defaultAssignment && nameKey(p.assignment) === nameKey(defaultAssignment)))
+      .map(p => nameKey(p.name))
+  );
+
+  return workerCatalog.map(w => {
+    const k = nameKey(w.name);
+    const isAlreadyInThis = assignedToThisAct.has(k);
+    const myEntriesToday = day.crew.filter(p => nameKey(p.name) === k);
+    const totHhToday = myEntriesToday.reduce((sum, p) => sum + p.hours + (p.extra || 0), 0);
+
+    let statusText = '';
+    if (isAlreadyInThis) {
+      statusText = '· (Ya asignado a esta actividad)';
+    } else if (totHhToday > 0) {
+      const remainingNormal = Math.max(0, 9 - totHhToday);
+      statusText = `· (${num(totHhToday)} h hoy · ${num(remainingNormal)} h normales restantes)`;
+    } else {
+      statusText = '· (Jornada completa disponible · 9 h)';
+    }
+
+    return `<label class="multi-select-item ${isAlreadyInThis ? 'disabled' : ''}">
+      <input type="checkbox" name="selected_workers" value="${esc(w.name)}" data-role="${esc(w.role)}" ${isAlreadyInThis ? 'disabled checked' : ''}>
+      <div class="item-info">
+        <strong>${esc(w.name)}</strong>
+        <span>${esc(w.role)} ${statusText}</span>
+      </div>
+    </label>`;
+  }).join('');
+}
+
 export function multiPersonForm(dayId, preselectedActivity = '') {
   const day = stateStore.state.days.find(d => d.id === dayId); if (!day || day.closedAt) return;
-  const workerCatalog = stateStore.catalog.trabajadores || [];
-  const existingNames = new Set(day.crew.map(p => nameKey(p.name)));
 
-  let defaultAssignment = preselectedActivity;
-  if (preselectedActivity) {
-    const act = day.activities.find(a => a.id === preselectedActivity);
-    if (act) defaultAssignment = activityLabel(act);
-  } else if (day.activities.length) {
-    defaultAssignment = activityLabel(day.activities[0]);
-  }
+  const targetAct = preselectedActivity ? day.activities.find(a => a.id === preselectedActivity) : (day.activities[0] || null);
+  const targetActId = targetAct?.id || '';
+  const defaultAssignment = targetAct ? activityLabel(targetAct) : '';
 
-  const listHtml = workerCatalog.map(w => {
-    const isAlready = existingNames.has(nameKey(w.name));
-    return `<label class="multi-select-item ${isAlready ? 'disabled' : ''}"><input type="checkbox" name="selected_workers" value="${esc(w.name)}" data-role="${esc(w.role)}" ${isAlready ? 'disabled checked' : ''}><div class="item-info"><strong>${esc(w.name)}</strong><span>${esc(w.role)} ${isAlready ? '· (Ya registrado hoy)' : ''}</span></div></label>`;
-  }).join('');
+  const listHtml = renderMultiPersonWorkerList(day, targetActId);
 
   const actSelectHtml = day.activities.length ? `
     <label class="field full">
       <span>Vincular a actividad registrada:</span>
       <select id="multi-activity-select" name="activity_link">
-        ${day.activities.map(a => `<option value="${esc(activityLabel(a))}" ${defaultAssignment === activityLabel(a) ? 'selected' : ''}>${esc(activityLabel(a))}</option>`).join('')}
-        <option value="" ${!defaultAssignment ? 'selected' : ''}>Otra labor / Apoyo general</option>
+        ${day.activities.map(a => `<option value="${esc(a.id)}" data-label="${esc(activityLabel(a))}" ${targetActId === a.id ? 'selected' : ''}>${esc(activityLabel(a))}</option>`).join('')}
+        <option value="" ${!targetActId ? 'selected' : ''}>Otra labor manual / General</option>
       </select>
     </label>` : '';
 
-  showDialog('Selección múltiple de cuadrilla', 'Marca los trabajadores que asistieron hoy a la jornada.', `<div class="form-grid">${input('default_hours', 'Horas normales', 8, 'type="number" min="0" max="24" step="0.25" required')}${input('default_extra', 'Horas extra', 0, 'type="number" min="0" max="24" step="0.25" required')}${actSelectHtml}<label class="field full"><span>Asignación (texto descriptivo)</span><input name="default_assignment" id="multi-default-assignment" value="${esc(defaultAssignment)}" placeholder="Ej.: OA6 capa 7 · movimiento de tierra" list="assignments"><datalist id="assignments">${day.activities.map(a => `<option value="${esc(activityLabel(a))}"></option>`).join('')}</datalist></label><div class="field full"><span>Selecciona los trabajadores presentes:</span><div class="multi-select-grid" style="margin-top:8px">${listHtml}</div></div></div>`, { form: 'multi-person', dayId });
+  showDialog(
+    'Asignar cuadrilla a actividad',
+    'Horario laboral: 08:00 a 18:00 (1h de colación = 9h normales). Distribuye las HH del personal entre las distintas actividades del día.',
+    `<div class="form-grid">
+      ${input('default_hours', 'Horas asignadas a esta actividad', targetAct ? 4 : 8, 'type="number" min="0.25" max="24" step="0.25" required')}
+      ${input('default_extra', 'Horas extra en esta actividad', 0, 'type="number" min="0" max="24" step="0.25" required')}
+      ${actSelectHtml}
+      <label class="field full">
+        <span>Asignación (texto descriptivo)</span>
+        <input name="default_assignment" id="multi-default-assignment" value="${esc(defaultAssignment)}" placeholder="Ej.: OA6 capa 7 · movimiento de tierra" list="assignments">
+        <datalist id="assignments">${day.activities.map(a => `<option value="${esc(activityLabel(a))}"></option>`).join('')}</datalist>
+      </label>
+      <div class="field full">
+        <span>Selecciona los trabajadores a asignar:</span>
+        <div class="multi-select-grid" id="multi-workers-grid" style="margin-top:8px">${listHtml}</div>
+      </div>
+    </div>`,
+    { form: 'multi-person', dayId, activityId: targetActId }
+  );
 }
 
 export function copyYesterdayCrewForm(dayId) {

@@ -22,6 +22,7 @@ export const stateStore = {
   mapLayer: '',
   mapProcess: '',
   mapDate: '',
+  mapViewMode: 'cards',
   pendingSyncState: null,
   pendingTabFilter: 'all',
   pendingScope: 'today',
