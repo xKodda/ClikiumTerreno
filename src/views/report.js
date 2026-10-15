@@ -82,10 +82,13 @@ export function renderReport() {
   </div>
   <article class="report">
     <header class="report-head">
-      <div>
-        <div class="eyebrow">CLIKIUM TERRENO · INFORME DIARIO${day.isDemo ? ' · EJEMPLO' : ''}</div>
-        <h1>Control de Obra y Faena</h1>
-        <p class="muted"><strong>Proyecto:</strong> ${esc(project)} · <strong>Capataz:</strong> ${esc(day.user)}</p>
+      <div style="display:flex;align-items:center;gap:16px">
+        <img src="/logo.svg" alt="Clikium Terreno" style="width:52px;height:52px;border-radius:10px;object-fit:cover;box-shadow:0 2px 6px rgba(0,0,0,0.25)">
+        <div>
+          <div class="eyebrow">CLIKIUM TERRENO · INFORME DIARIO${day.isDemo ? ' · EJEMPLO' : ''}</div>
+          <h1>Control de Obra y Faena</h1>
+          <p class="muted"><strong>Proyecto:</strong> ${esc(project)} · <strong>Capataz:</strong> ${esc(day.user)}</p>
+        </div>
       </div>
       <div class="report-meta">
         <strong>${esc(day.date)}</strong><br>
