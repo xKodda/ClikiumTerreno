@@ -892,11 +892,10 @@ async function load() {
       $('#main').innerHTML = `
         <div class="flex items-center justify-center min-h-[75vh] px-4 py-8">
           <div class="bg-white border border-slate-200/90 p-6 sm:p-8 rounded-2xl shadow-xl max-w-sm w-full text-center">
-            <div class="w-16 h-16 rounded-2xl mx-auto mb-4 shadow-lg overflow-hidden flex items-center justify-center border border-slate-200">
+            <div class="w-24 h-24 rounded-2xl mx-auto mb-4 shadow-xl overflow-hidden flex items-center justify-center border border-slate-700/50">
               <img src="/src/logo/Logo%20con%20fondo%20CT.svg" alt="Clikium Terreno" class="w-full h-full object-cover">
             </div>
-            <h2 class="text-xl font-bold text-slate-900 mb-1">Clikium Terreno</h2>
-            <p class="text-slate-500 mb-4 text-xs">Acceso a faena · Túnel Lo Ruiz</p>
+            <p class="text-slate-500 mb-4 text-xs font-medium">Acceso a faena · Túnel Lo Ruiz</p>
 
             ${hashErrorMsg ? `<div class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs text-left leading-relaxed">Aviso: ${esc(hashErrorMsg)}</div>` : ''}
             <div id="login-alert-banner"></div>
