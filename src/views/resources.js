@@ -20,6 +20,8 @@ export function renderResources() {
   const open = !day.closedAt;
   const hh = day.crew.reduce((n, p) => n + p.hours + p.extra, 0);
   const extra = day.crew.reduce((n, p) => n + p.extra, 0);
+  const assignedCrew = day.crew.filter(p => !!findAssignedActivity(p, day));
+  const assignedHh = assignedCrew.reduce((n, p) => n + p.hours + p.extra, 0);
   const machHours = day.machines.reduce((n, m) => n + m.hours, 0);
   const standby = day.machines.reduce((n, m) => n + m.standby, 0);
   const assignedMachines = day.machines.filter(m => !!findAssignedActivity(m, day));

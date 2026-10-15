@@ -55,8 +55,7 @@ export function render() {
     ['pending', 'check', `Pendientes${pendingBadge}`],
     ['history', 'history', 'Historial'],
     ['map', 'map', 'Tramos'],
-    ['resources', 'people', 'Recursos'],
-    ['backup', 'backup', 'Respaldo']
+    ['resources', 'people', 'Recursos']
   ];
 
   $('#nav').innerHTML = items.map(([key, i, label]) =>
