@@ -21,7 +21,7 @@ import {
 
 import {
   modal, showDialog, startForm, activityForm, resourceForm, multiPersonForm,
-  renderMultiPersonWorkerList, copyYesterdayCrewForm, controlForm, annulForm, updateActivityForm, updateQuantityForm,
+  renderMultiPersonWorkerList, multiMachineForm, renderMultiMachineList, copyYesterdayCrewForm, controlForm, annulForm, updateActivityForm, updateQuantityForm,
   updateSectorForm, updateLayerForm, repeatPreviousActivity, detail, demo
 } from './dialogs.js';
 
@@ -128,8 +128,29 @@ document.addEventListener('click', async event => {
     if (action === 'assign-crew') return multiPersonForm(dayId, id);
     if (action === 'copy-yesterday-crew') return copyYesterdayCrewForm(id);
     if (action === 'edit-person') return resourceForm(dayId, 'person', id);
+    if (action === 'delete-person') {
+      if (!confirm('¿Deseas quitar este trabajador de la jornada?')) return;
+      const { nextState, day } = editDay(dayId);
+      day.crew = day.crew.filter(p => p.id !== id);
+      await save(nextState);
+      modal.close();
+      render();
+      toast('Trabajador eliminado de la jornada.');
+      return;
+    }
     if (action === 'add-machine') return resourceForm(id, 'machine');
+    if (action === 'add-multi-machine') return multiMachineForm(id);
     if (action === 'edit-machine') return resourceForm(dayId, 'machine', id);
+    if (action === 'delete-machine') {
+      if (!confirm('¿Deseas quitar este equipo de la jornada?')) return;
+      const { nextState, day } = editDay(dayId);
+      day.machines = day.machines.filter(m => m.id !== id);
+      await save(nextState);
+      modal.close();
+      render();
+      toast('Equipo eliminado de la jornada.');
+      return;
+    }
     if (action === 'open-day') { stateStore.selectedDayId = id; localStorage.setItem('clikium_selected_day_id', id); stateStore.pendingScope = 'today'; stateStore.view = 'today'; render(); return; }
     if (action === 'reopen-day') {
       const { nextState, day } = editDay(id);
@@ -268,6 +289,41 @@ document.addEventListener('change', event => {
     if (asgInput) {
       if (event.target.value === '__custom__') { asgInput.value = ''; asgInput.focus(); }
       else if (event.target.value) { asgInput.value = event.target.value; }
+    }
+  }
+  if (id === 'machine-catalog-select') {
+    const selVal = event.target.value;
+    const form = event.target.closest('form');
+    if (form) {
+      const customWrap = $('#custom-machine-fields');
+      const nameInput = $('#machine-name-input');
+      const opInput = $('#machine-operator-input');
+      if (selVal === '__custom__') {
+        if (customWrap) customWrap.style.display = 'block';
+        if (nameInput) { nameInput.value = ''; nameInput.focus(); }
+        if (opInput) opInput.value = '';
+      } else {
+        if (customWrap) customWrap.style.display = 'none';
+        const opt = event.target.selectedOptions?.[0];
+        const opVal = opt?.dataset.operator || '';
+        if (nameInput) nameInput.value = selVal;
+        if (opInput) opInput.value = opVal;
+      }
+    }
+  }
+  if (id === 'multi-machine-activity-select') {
+    const selActId = event.target.value;
+    const day = selectedDay();
+    const targetAct = day?.activities.find(a => a.id === selActId);
+    const form = event.target.closest('form');
+    if (form) {
+      form.dataset.activityId = selActId;
+      const asgInput = $('#multi-machine-default-assignment');
+      if (asgInput) { asgInput.value = targetAct ? activityLabel(targetAct) : ''; }
+      const grid = $('#multi-machines-grid');
+      if (grid && day) {
+        grid.innerHTML = renderMultiMachineList(day, selActId);
+      }
     }
   }
   if (id === 'multi-activity-select') {
@@ -490,7 +546,13 @@ document.addEventListener('submit', async event => {
 
       } else if (type === 'person' || type === 'machine') {
         const person = type === 'person';
-        const nameVal = val('name');
+        let nameVal = val('name');
+        if (!person && !nameVal) {
+          const preset = val('machine_preset');
+          if (preset && preset !== '__custom__') nameVal = preset;
+        }
+        if (!nameVal) throw new Error(person ? 'Ingresa el nombre del trabajador.' : 'Selecciona o ingresa el nombre del equipo.');
+
         const asgVal = val('assignment');
         const actLink = val('activity_link') || '';
         const targetAct = day.activities.find(a => (form.dataset.activityId && a.id === form.dataset.activityId) || activityLabel(a) === asgVal || activityLabel(a) === actLink);
@@ -509,6 +571,43 @@ document.addEventListener('submit', async event => {
           ...(person ? { role: val('role'), extra: number('extra') } : { operator: val('operator'), standby: number('standby') })
         };
         if (existing) Object.assign(existing, record); else list.push(record);
+
+      } else if (type === 'multi-machine') {
+        const checkboxes = form.querySelectorAll('input[name="selected_machines"]:checked:not(:disabled)');
+        if (!checkboxes.length) throw new Error('Selecciona al menos una máquina para ingresar.');
+        const h = number('default_hours'), sb = number('default_standby');
+        if (h + sb > 24) throw new Error('La suma de operación y stand-by no puede superar 24 h.');
+        const actLink = form.elements.activity_link?.value || '';
+        const targetActId = actLink || form.dataset.activityId || '';
+        const targetAct = day.activities.find(a => a.id === targetActId) || day.activities.find(a => activityLabel(a) === actLink);
+        const asgInput = val('default_assignment');
+        const asg = asgInput || (targetAct ? activityLabel(targetAct) : 'Movimiento de tierra / faena');
+        const actIdToSave = targetAct?.id || null;
+
+        let added = 0;
+        for (const cb of checkboxes) {
+          const mName = cb.value;
+          const opName = cb.dataset.operator || '';
+          const alreadyInThis = day.machines.some(m =>
+            nameKey(m.name) === nameKey(mName) && (
+              (actIdToSave && m.activityId === actIdToSave) ||
+              (asg && nameKey(m.assignment) === nameKey(asg))
+            )
+          );
+          if (alreadyInThis) continue;
+
+          day.machines.push({
+            id: uid(),
+            name: mName,
+            operator: opName,
+            hours: h,
+            standby: sb,
+            assignment: asg,
+            activityId: actIdToSave
+          });
+          added++;
+        }
+        toast(`Se incorporaron ${added} equipos a la jornada.`);
 
       } else if (type === 'multi-person') {
         const checkboxes = form.querySelectorAll('input[name="selected_workers"]:checked:not(:disabled)');

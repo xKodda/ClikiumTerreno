@@ -528,21 +528,204 @@ export function controlForm(dayId, activityId) {
 export function resourceForm(dayId, type, recordId = '') {
   const day = stateStore.state.days.find(d => d.id === dayId); if (!day || day.closedAt) return;
   const person = type === 'person', list = person ? day.crew : day.machines;
-  const record = list.find(x => x.id === recordId) || (person ? { name: '', role: 'M1', hours: 8, extra: 0, assignment: '' } : { name: 'Excavadora CAT 323 · I-36', operator: 'César Luncumilla', hours: 8, standby: 0, assignment: '' });
-  const workerCatalog = stateStore.catalog.trabajadores || [{ name: 'Juan Calfula', role: 'M1' }, { name: 'Darwin Morales', role: 'Operador' }, { name: 'Ruperto Soto', role: 'M1' }, { name: 'Juan Layten', role: 'M1' }, { name: 'Bastián Delgado', role: 'Carcheck' }, { name: 'Esteban Coloma', role: 'Capataz' }];
-  const machineCatalog = stateStore.catalog.maquinarias || [{ name: 'Excavadora CAT 323 · I-36', operator: 'César Luncumilla' }, { name: 'Camión Tolva Mercedes 2638 · T-12', operator: 'Patricio Rivas' }];
+  const workerCatalog = stateStore.catalog?.trabajadores || [{ name: 'Juan Calfulaf', role: 'M1' }, { name: 'Darwin Morales', role: 'Operador' }, { name: 'Ruperto Soto', role: 'M1' }, { name: 'Juan Layten', role: 'M1' }, { name: 'Bastián Delgado', role: 'M1' }, { name: 'Esteban Coloma', role: 'M1' }, { name: 'César Luncumilla', role: 'Operador' }];
+  const machineCatalog = stateStore.catalog?.maquinarias || [
+    { name: 'Excavadora CAT 323 · I-36', operator: 'César Luncumilla' },
+    { name: 'Bulldozer CAT D8T · I-86', operator: 'Óscar Quiroz' },
+    { name: 'Camión Tolva · I-154', operator: 'Donosor Díaz' },
+    { name: 'Rodillo 14T · I-59', operator: 'Daniel Contreras' }
+  ];
+
+  const record = list.find(x => x.id === recordId) || (person
+    ? { name: '', role: 'M1', hours: 9, extra: 0, assignment: '' }
+    : { name: machineCatalog[0]?.name || '', operator: machineCatalog[0]?.operator || '', hours: 8, standby: 0, assignment: '' }
+  );
 
   const actSelectHtml = day.activities.length ? `
     <label class="field full">
-      <span>Vincular a actividad del día (a prueba de fallos)</span>
+      <span>Vincular a actividad del día (opcional)</span>
       <select id="single-activity-select" name="activity_link">
-        <option value="">-- Sin vincular a actividad específica --</option>
+        <option value="" ${!record.assignment ? 'selected' : ''}>-- Sin vincular a actividad específica --</option>
         ${day.activities.map(a => `<option value="${esc(activityLabel(a))}" ${record.assignment === activityLabel(a) ? 'selected' : ''}>${esc(activityLabel(a))}</option>`).join('')}
         <option value="__custom__">Escribir otra labor manual...</option>
       </select>
     </label>` : '';
 
-  showDialog(person ? (recordId ? 'Editar persona' : 'Registrar persona') : (recordId ? 'Editar maquinaria' : 'Registrar maquinaria'), 'Las horas son ingresadas manualmente para esta jornada.', `<div class="form-grid">${input('name', person ? 'Nombre' : 'Equipo / código', record.name, `required maxlength="150" ${person ? 'list="known-people"' : 'list="known-machines"'}`)}${person ? `<datalist id="known-people">${workerCatalog.map(n => `<option value="${esc(n.name)}">${esc(n.name)} (${esc(n.role)})</option>`).join('')}</datalist>` : `<datalist id="known-machines">${machineCatalog.map(m => `<option value="${esc(m.name)}">${esc(m.name)} — Operador: ${esc(m.operator)}</option>`).join('')}</datalist>`}${person ? select('role', 'Cargo', ['M1', 'Operador', 'Carcheck', 'Capataz', 'Supervisor', 'Otro'], record.role) : input('operator', 'Operador', record.operator, 'maxlength="150"')}${input('hours', person ? 'Horas normales efectivas' : 'Horas de operación', record.hours, 'type="number" min="0" max="24" step="0.25" required')}${input(person ? 'extra' : 'standby', person ? 'Horas extra' : 'Stand-by (horas)', person ? record.extra : record.standby, 'type="number" min="0" max="24" step="0.25" required')}${actSelectHtml}<label class="field full"><span>Asignación / motivo de espera</span><input name="assignment" id="single-assignment-input" value="${esc(record.assignment)}" placeholder="Ej.: OA6 capa 7 · excavación / extendido" maxlength="300" list="assignments"><datalist id="assignments">${day.activities.map(a => `<option value="${esc(activityLabel(a))}"></option>`).join('')}</datalist></label></div>`, { form: type, dayId, recordId });
+  if (!person) {
+    // ========================================================================
+    // FORMULARIO INTUITIVO DE MAQUINARIA
+    // ========================================================================
+    const isCustom = Boolean(record.name && !machineCatalog.some(m => m.name === record.name));
+    const selectedPreset = isCustom ? '__custom__' : (record.name || (machineCatalog[0]?.name || ''));
+    const matchedMachine = machineCatalog.find(m => m.name === selectedPreset);
+    const initialOperator = record.operator || matchedMachine?.operator || machineCatalog[0]?.operator || '';
+
+    const machineOptions = machineCatalog.map(m => {
+      const isAlready = day.machines.some(em => em.id !== recordId && nameKey(em.name) === nameKey(m.name));
+      const label = `${m.name} (Operador: ${m.operator})${isAlready ? ' · Ya en faena hoy' : ''}`;
+      return `<option value="${esc(m.name)}" data-operator="${esc(m.operator)}" ${m.name === selectedPreset ? 'selected' : ''}>${esc(label)}</option>`;
+    }).join('');
+
+    const deleteBtn = recordId ? `
+      <div style="grid-column:1/-1;margin-top:14px;padding-top:14px;border-top:1px solid #fee2e2;display:flex;justify-content:space-between;align-items:center">
+        <span class="muted" style="font-size:0.82rem">¿Deseas remover este equipo de la jornada?</span>
+        <button type="button" class="btn btn-sm btn-danger" data-action="delete-machine" data-id="${esc(recordId)}" data-day-id="${esc(dayId)}">Quitar equipo</button>
+      </div>` : '';
+
+    const body = `
+      <div class="form-grid">
+        <label class="field full">
+          <span>Seleccionar equipo de faena</span>
+          <select id="machine-catalog-select" name="machine_preset" style="font-weight:600">
+            ${machineOptions}
+            <option value="__custom__" ${isCustom ? 'selected' : ''}>+ Ingresar otro equipo manual / externo...</option>
+          </select>
+          <span class="hint">Al seleccionar el equipo, su operador asignado se enlaza automáticamente.</span>
+        </label>
+
+        <div id="custom-machine-fields" class="field full" style="display:${isCustom ? 'block' : 'none'}">
+          <label class="field">
+            <span>Nombre o código del equipo</span>
+            <input name="name" id="machine-name-input" value="${esc(record.name || '')}" placeholder="Ej.: Retroexcavadora JCB 3CX" maxlength="150">
+          </label>
+        </div>
+
+        <label class="field">
+          <span>Operador a cargo</span>
+          <input name="operator" id="machine-operator-input" value="${esc(initialOperator)}" placeholder="Nombre del operador" maxlength="150" list="known-operators" required>
+          <datalist id="known-operators">
+            ${[...new Set([...machineCatalog.map(m => m.operator), ...workerCatalog.filter(w => (w.role || '').toLowerCase().includes('operad')).map(w => w.name)])].filter(Boolean).map(op => `<option value="${esc(op)}">${esc(op)}</option>`).join('')}
+          </datalist>
+          <span class="hint">Enlazado automáticamente. Puedes modificarlo si operó otra persona.</span>
+        </label>
+
+        <label class="field">
+          <span>Horas de operación</span>
+          <input name="hours" type="number" min="0" max="24" step="0.25" value="${record.hours ?? 8}" required>
+        </label>
+
+        <label class="field">
+          <span>Stand-by / Espera (horas)</span>
+          <input name="standby" type="number" min="0" max="24" step="0.25" value="${record.standby ?? 0}" required>
+        </label>
+
+        ${actSelectHtml}
+
+        <label class="field full">
+          <span>Asignación o motivo de espera</span>
+          <input name="assignment" id="single-assignment-input" value="${esc(record.assignment || '')}" placeholder="Ej.: Movimiento de tierra · o Standby por mantención" maxlength="300" list="assignments">
+          <datalist id="assignments">${day.activities.map(a => `<option value="${esc(activityLabel(a))}"></option>`).join('')}</datalist>
+        </label>
+
+        ${deleteBtn}
+      </div>`;
+
+    showDialog(recordId ? 'Editar maquinaria' : 'Incorporar maquinaria', 'Registra las horas de trabajo del equipo y su operador.', body, { form: 'machine', dayId, recordId });
+    return;
+  }
+
+  // ========================================================================
+  // FORMULARIO DE CUADRILLA / PERSONAL
+  // ========================================================================
+  const deletePersonBtn = recordId ? `
+    <div style="grid-column:1/-1;margin-top:14px;padding-top:14px;border-top:1px solid #fee2e2;display:flex;justify-content:space-between;align-items:center">
+      <span class="muted" style="font-size:0.82rem">¿Deseas remover este trabajador de la jornada?</span>
+      <button type="button" class="btn btn-sm btn-danger" data-action="delete-person" data-id="${esc(recordId)}" data-day-id="${esc(dayId)}">Quitar persona</button>
+    </div>` : '';
+
+  showDialog(
+    recordId ? 'Editar persona' : 'Registrar persona',
+    'Las horas son ingresadas para esta jornada laboral.',
+    `<div class="form-grid">
+      ${input('name', 'Nombre del trabajador', record.name, `required maxlength="150" list="known-people"`)}
+      <datalist id="known-people">${workerCatalog.map(n => `<option value="${esc(n.name)}">${esc(n.name)} (${esc(n.role)})</option>`).join('')}</datalist>
+      ${select('role', 'Cargo', ['M1', 'Operador', 'Carcheck', 'Capataz', 'Supervisor', 'Otro'], record.role)}
+      ${input('hours', 'Horas normales efectivas', record.hours ?? 9, 'type="number" min="0" max="24" step="0.25" required')}
+      ${input('extra', 'Horas extra', record.extra ?? 0, 'type="number" min="0" max="24" step="0.25" required')}
+      ${actSelectHtml}
+      <label class="field full">
+        <span>Asignación / tarea</span>
+        <input name="assignment" id="single-assignment-input" value="${esc(record.assignment)}" placeholder="Ej.: OA6 capa 7 · colocación de tubos" maxlength="300" list="assignments">
+        <datalist id="assignments">${day.activities.map(a => `<option value="${esc(activityLabel(a))}"></option>`).join('')}</datalist>
+      </label>
+      ${deletePersonBtn}
+    </div>`,
+    { form: 'person', dayId, recordId }
+  );
+}
+
+export function renderMultiMachineList(day, targetActId) {
+  const machineCatalog = stateStore.catalog?.maquinarias || [];
+  const targetAct = targetActId ? day.activities.find(a => a.id === targetActId) : null;
+  const defaultAssignment = targetAct ? activityLabel(targetAct) : '';
+
+  const assignedToThisAct = new Set(
+    day.machines
+      .filter(m => (targetActId && m.activityId === targetActId) || (defaultAssignment && nameKey(m.assignment) === nameKey(defaultAssignment)))
+      .map(m => nameKey(m.name))
+  );
+
+  return machineCatalog.map(m => {
+    const k = nameKey(m.name);
+    const isAlreadyInThis = assignedToThisAct.has(k);
+    const myEntriesToday = day.machines.filter(mach => nameKey(mach.name) === k);
+    const totHoursToday = myEntriesToday.reduce((sum, mach) => sum + mach.hours + (mach.standby || 0), 0);
+
+    let statusText = '';
+    if (isAlreadyInThis) {
+      statusText = '· (Ya asignado a esta actividad)';
+    } else if (totHoursToday > 0) {
+      statusText = `· (${num(totHoursToday)} h hoy)`;
+    } else {
+      statusText = '· (Disponible en faena)';
+    }
+
+    return `<label class="multi-select-item ${isAlreadyInThis ? 'disabled' : ''}">
+      <input type="checkbox" name="selected_machines" value="${esc(m.name)}" data-operator="${esc(m.operator)}" ${isAlreadyInThis ? 'disabled checked' : 'checked'}>
+      <div class="item-info">
+        <strong>${esc(m.name)}</strong>
+        <span>Operador: <b>${esc(m.operator || 'Sin asignar')}</b> ${statusText}</span>
+      </div>
+    </label>`;
+  }).join('');
+}
+
+export function multiMachineForm(dayId, preselectedActivity = '') {
+  const day = stateStore.state.days.find(d => d.id === dayId); if (!day || day.closedAt) return;
+
+  const targetAct = preselectedActivity ? day.activities.find(a => a.id === preselectedActivity) : (day.activities[0] || null);
+  const targetActId = targetAct?.id || '';
+  const defaultAssignment = targetAct ? activityLabel(targetAct) : '';
+
+  const listHtml = renderMultiMachineList(day, targetActId);
+
+  const actSelectHtml = day.activities.length ? `
+    <label class="field full">
+      <span>Vincular a actividad del día (opcional)</span>
+      <select id="multi-machine-activity-select" name="activity_link">
+        ${day.activities.map(a => `<option value="${esc(a.id)}" data-label="${esc(activityLabel(a))}" ${targetActId === a.id ? 'selected' : ''}>${esc(activityLabel(a))}</option>`).join('')}
+        <option value="" ${!targetActId ? 'selected' : ''}>-- Sin vincular a actividad específica / Faena general --</option>
+      </select>
+    </label>` : '';
+
+  showDialog(
+    'Incorporar maquinaria de faena',
+    'Ingresa los equipos oficiales del proyecto con sus operadores habituales en un solo paso.',
+    `<div class="form-grid">
+      ${input('default_hours', 'Horas de operación por equipo', 8, 'type="number" min="0" max="24" step="0.5" required')}
+      ${input('default_standby', 'Horas de stand-by (espera)', 0, 'type="number" min="0" max="24" step="0.5" required')}
+      ${actSelectHtml}
+      <label class="field full">
+        <span>Asignación (texto descriptivo)</span>
+        <input name="default_assignment" id="multi-machine-default-assignment" value="${esc(defaultAssignment)}" placeholder="Ej.: Movimiento de tierra / excavación">
+      </label>
+      <div class="field full">
+        <span>Selecciona los equipos que operaron hoy:</span>
+        <div class="multi-select-grid" id="multi-machines-grid" style="margin-top:8px">${listHtml}</div>
+      </div>
+    </div>`,
+    { form: 'multi-machine', dayId, activityId: targetActId }
+  );
 }
 
 export function renderMultiPersonWorkerList(day, targetActId) {
