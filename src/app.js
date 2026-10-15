@@ -892,7 +892,7 @@ async function load() {
       $('#main').innerHTML = `
         <div class="flex items-center justify-center min-h-[75vh] px-4 py-8">
           <div class="bg-white border border-slate-200/90 p-6 sm:p-8 rounded-2xl shadow-xl max-w-sm w-full text-center">
-            <div class="w-24 h-24 rounded-2xl mx-auto mb-4 shadow-xl overflow-hidden flex items-center justify-center border border-slate-700/50">
+            <div class="w-20 h-20 rounded-2xl mx-auto mb-3 shadow-xl overflow-hidden flex items-center justify-center border border-slate-700/50">
               <img src="/src/logo/Logo%20con%20fondo%20CT.svg" alt="Clikium Terreno" class="w-full h-full object-cover">
             </div>
             <p class="text-slate-500 mb-4 text-xs font-medium">Acceso a faena · Túnel Lo Ruiz</p>

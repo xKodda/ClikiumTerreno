@@ -1048,64 +1048,54 @@ dialog#modal::backdrop {
 }
 
 /* ==========================================================================
-   LOGO OFICIAL CON FONDO
+   LOGO OFICIAL CON FONDO (SOLO EN DESKTOP > 800px)
    ========================================================================== */
-.brand {
-  display: flex !important;
-  justify-content: center !important;
-  align-items: center !important;
-  padding: 0 0 10px 0;
-  text-decoration: none;
-}
+@media (min-width: 801px) {
+  .sidebar .brand {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 6px;
+    padding: 0;
+    text-decoration: none;
+  }
 
-.brand-logo-img {
-  width: 140px;
-  height: 140px;
-  max-width: 100%;
-  border-radius: 20px;
-  object-fit: cover;
-  flex-shrink: 0;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-  background: #0a0f2c;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.brand-logo-img:hover {
-  transform: scale(1.03);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
-}
-
-.topbar-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.topbar-logo-mobile {
-  display: none;
-  width: 42px;
-  height: 42px;
-  border-radius: 9px;
-  object-fit: cover;
-  flex-shrink: 0;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
-  background: #0a0f2c;
-}
-
-@media (max-width: 1150px) {
   .brand-logo-img {
-    width: 120px;
-    height: 120px;
+    width: 130px;
+    height: 130px;
+    max-width: 100%;
+    border-radius: 18px;
+    object-fit: cover;
+    flex-shrink: 0;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+    background: #0a0f2c;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .brand-logo-img:hover {
+    transform: scale(1.02);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+  }
+
+  .sidebar .project-label {
+    margin-top: 20px;
   }
 }
 
-.sidebar .project-label {
-  margin-top: 22px;
+@media (max-width: 1150px) and (min-width: 801px) {
+  .brand-logo-img {
+    width: 115px;
+    height: 115px;
+  }
 }
 
+/* En Móvil (<= 800px): ocultar completamente el brand para proteger la barra inferior de navegación */
 @media (max-width: 800px) {
-  .topbar-logo-mobile {
-    display: block;
+  .sidebar .brand,
+  .brand,
+  .brand-logo-img {
+    display: none !important;
   }
 }
+
 
