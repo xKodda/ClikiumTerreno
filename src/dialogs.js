@@ -11,7 +11,8 @@ import {
   TRANSFER_DESTINATIONS, TRANSFER_PURPOSES, isLoadingActivity,
   isLoadingOnlyActivity, isTransferActivity, isLayerActivity,
   isDirectMeasurementActivity, getDefaultUnit, CIVIL_WORKS_PROCESSES,
-  STANDARD_PROCESSES, formatActivityMeta, parseActivityMeta
+  STANDARD_PROCESSES, formatActivityMeta, parseActivityMeta,
+  STANDARD_NORMAL_HOURS, getWorkerDayHours
 } from './utils.js';
 import {
   stateStore, selectedDay, allActivities, metadata, amount, capatazField,
@@ -525,7 +526,39 @@ export function controlForm(dayId, activityId) {
   showDialog('Registrar control', 'Cada cambio queda como un evento nuevo, con fecha y hora.', `<div class="form-grid">${select('type', 'Tipo de control', ['Laboratorio', 'Topografía', 'General'], 'Laboratorio')}${select('status', 'Resultado', ['Control pendiente', 'Rechazado', 'Aprobado'], 'Control pendiente')}${input('author', 'Responsable', s.user || '', 'required maxlength="150"')}${textarea('note', 'Observación / número de protocolo')}<label class="field full"><span>Foto o PDF del protocolo</span><input name="attachment" type="file" accept="image/jpeg,image/png,image/webp,application/pdf"><span class="hint">Máximo 12 MB. Este registro conserva la hora en que fue ingresado.</span></label></div>`, { form: 'control', dayId, activityId });
 }
 
-export function resourceForm(dayId, type, recordId = '') {
+export function renderWorkerBalanceCard(day, workerName, recordId = '') {
+  if (!workerName) {
+    return `<div id="worker-balance-card" class="field full" style="display:none"></div>`;
+  }
+  const stats = getWorkerDayHours(day, workerName, recordId);
+  if (!stats.entries.length) {
+    return `
+      <div id="worker-balance-card" class="field full" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;font-size:0.83rem">
+        <div style="font-weight:600;color:#0f172a">Sin labores previas hoy</div>
+        <div style="color:#64748b;margin-top:2px">Jornada de 9h disponible completa: <strong>${stats.remainingNormal} h normales</strong> libres.</div>
+      </div>`;
+  }
+
+  const isComplete = stats.remainingNormal === 0;
+  return `
+    <div id="worker-balance-card" class="field full" style="background:${isComplete ? '#fbf7ff' : '#f0f9ff'};border:1px solid ${isComplete ? '#e9d5ff' : '#bae6fd'};border-radius:8px;padding:12px;font-size:0.83rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <strong style="color:${isComplete ? '#6b21a8' : '#0369a1'}">Labores previas hoy (${esc(workerName)}):</strong>
+        <span class="badge ${isComplete ? 'approved' : 'pending'}" style="font-size:0.75rem">${num(stats.normalHours)}/9h normales${stats.extraHours > 0 ? ` (+${stats.extraHours}h extra)` : ''}</span>
+      </div>
+      <ul style="margin:0 0 8px;padding-left:18px;color:#334155;line-height:1.45">
+        ${stats.entries.map(e => `<li><strong>${num(e.hours)} h</strong> ${e.extra ? `(+ ${num(e.extra)} h extra) ` : ''}en <em>${esc(e.assignment || 'General')}</em></li>`).join('')}
+      </ul>
+      <div style="border-top:1px solid ${isComplete ? '#f3e8ff' : '#e0f2fe'};padding-top:6px;display:flex;justify-content:space-between;align-items:center">
+        <span style="color:#64748b">Disponibles restantes hoy:</span>
+        <strong style="color:${isComplete ? '#7c3aed' : '#0284c7'}">
+          ${isComplete ? '0 h normales (nuevas horas pasarán a Horas Extra)' : `${num(stats.remainingNormal)} h normales`}
+        </strong>
+      </div>
+    </div>`;
+}
+
+export function resourceForm(dayId, type, recordId = '', preselectedWorker = '') {
   const day = stateStore.state.days.find(d => d.id === dayId); if (!day || day.closedAt) return;
   const person = type === 'person', list = person ? day.crew : day.machines;
   const workerCatalog = stateStore.catalog?.trabajadores || [{ name: 'Juan Calfulaf', role: 'M1' }, { name: 'Darwin Morales', role: 'Operador' }, { name: 'Ruperto Soto', role: 'M1' }, { name: 'Juan Layten', role: 'M1' }, { name: 'Bastián Delgado', role: 'M1' }, { name: 'Esteban Coloma', role: 'M1' }, { name: 'César Luncumilla', role: 'Operador' }];
@@ -536,8 +569,10 @@ export function resourceForm(dayId, type, recordId = '') {
     { name: 'Rodillo 14T · I-59', operator: 'Daniel Contreras' }
   ];
 
+  const matchedPresetWorker = preselectedWorker ? workerCatalog.find(w => nameKey(w.name) === nameKey(preselectedWorker)) : null;
+
   const record = list.find(x => x.id === recordId) || (person
-    ? { name: '', role: 'M1', hours: 9, extra: 0, assignment: '' }
+    ? { name: preselectedWorker || '', role: matchedPresetWorker?.role || 'M1', hours: 9, extra: 0, assignment: '' }
     : { name: machineCatalog[0]?.name || '', operator: machineCatalog[0]?.operator || '', hours: 8, standby: 0, assignment: '' }
   );
 
@@ -625,8 +660,14 @@ export function resourceForm(dayId, type, recordId = '') {
   }
 
   // ========================================================================
-  // FORMULARIO DE CUADRILLA / PERSONAL
+  // FORMULARIO DE CUADRILLA / PERSONAL (Control inteligente de 9h de faena)
   // ========================================================================
+  const stats = getWorkerDayHours(day, record.name, recordId);
+  const suggestedHours = recordId ? (record.hours ?? 9) : (stats.remainingNormal > 0 ? stats.remainingNormal : 0);
+  const suggestedExtra = recordId ? (record.extra ?? 0) : (stats.remainingNormal === 0 ? 2 : 0);
+
+  const prevWorkHtml = renderWorkerBalanceCard(day, record.name, recordId);
+
   const deletePersonBtn = recordId ? `
     <div style="grid-column:1/-1;margin-top:14px;padding-top:14px;border-top:1px solid #fee2e2;display:flex;justify-content:space-between;align-items:center">
       <span class="muted" style="font-size:0.82rem">¿Deseas remover este trabajador de la jornada?</span>
@@ -634,20 +675,41 @@ export function resourceForm(dayId, type, recordId = '') {
     </div>` : '';
 
   showDialog(
-    recordId ? 'Editar persona' : 'Registrar persona',
-    'Las horas son ingresadas para esta jornada laboral.',
+    recordId ? 'Editar asignación de trabajador' : 'Asignar horas a trabajador',
+    'Distribuye las 9h normales del maestro entre las distintas actividades que realizó.',
     `<div class="form-grid">
-      ${input('name', 'Nombre del trabajador', record.name, `required maxlength="150" list="known-people"`)}
-      <datalist id="known-people">${workerCatalog.map(n => `<option value="${esc(n.name)}">${esc(n.name)} (${esc(n.role)})</option>`).join('')}</datalist>
-      ${select('role', 'Cargo', ['M1', 'Operador', 'Carcheck', 'Capataz', 'Supervisor', 'Otro'], record.role)}
-      ${input('hours', 'Horas normales efectivas', record.hours ?? 9, 'type="number" min="0" max="24" step="0.25" required')}
-      ${input('extra', 'Horas extra', record.extra ?? 0, 'type="number" min="0" max="24" step="0.25" required')}
-      ${actSelectHtml}
       <label class="field full">
-        <span>Asignación / tarea</span>
+        <span>Nombre del trabajador</span>
+        <input name="name" id="worker-name-input" value="${esc(record.name)}" placeholder="Selecciona o escribe el nombre" required maxlength="150" list="known-people" autocomplete="off">
+        <datalist id="known-people">${workerCatalog.map(n => `<option value="${esc(n.name)}">${esc(n.name)} (${esc(n.role)})</option>`).join('')}</datalist>
+      </label>
+
+      ${prevWorkHtml}
+
+      ${select('role', 'Cargo', ['M1', 'Operador', 'Carcheck', 'Capataz', 'Supervisor', 'Otro'], record.role)}
+
+      <label class="field">
+        <span>Horas en esta actividad</span>
+        <input name="hours" id="worker-hours-input" type="number" min="0" max="24" step="0.25" value="${suggestedHours}" required>
+        <span class="hint" id="worker-hours-hint">Disponibles normales hoy: <b>${num(stats.remainingNormal)} h</b></span>
+      </label>
+
+      <label class="field">
+        <span>Horas extra en esta actividad</span>
+        <input name="extra" id="worker-extra-input" type="number" min="0" max="24" step="0.25" value="${suggestedExtra}" required>
+        <span class="hint" id="worker-extra-hint">Toda hora sobre las 9h normales del día debe quedar como extra.</span>
+      </label>
+
+      <div id="worker-hours-alert" class="field full" style="display:none;font-size:0.82rem;padding:8px 12px;border-radius:6px"></div>
+
+      ${actSelectHtml}
+
+      <label class="field full">
+        <span>Asignación / tarea realizada</span>
         <input name="assignment" id="single-assignment-input" value="${esc(record.assignment)}" placeholder="Ej.: OA6 capa 7 · colocación de tubos" maxlength="300" list="assignments">
         <datalist id="assignments">${day.activities.map(a => `<option value="${esc(activityLabel(a))}"></option>`).join('')}</datalist>
       </label>
+
       ${deletePersonBtn}
     </div>`,
     { form: 'person', dayId, recordId }
@@ -729,7 +791,7 @@ export function multiMachineForm(dayId, preselectedActivity = '') {
 }
 
 export function renderMultiPersonWorkerList(day, targetActId) {
-  const workerCatalog = stateStore.catalog.trabajadores || [];
+  const workerCatalog = stateStore.catalog?.trabajadores || [];
   const targetAct = targetActId ? day.activities.find(a => a.id === targetActId) : null;
   const defaultAssignment = targetAct ? activityLabel(targetAct) : '';
 
@@ -742,24 +804,25 @@ export function renderMultiPersonWorkerList(day, targetActId) {
   return workerCatalog.map(w => {
     const k = nameKey(w.name);
     const isAlreadyInThis = assignedToThisAct.has(k);
-    const myEntriesToday = day.crew.filter(p => nameKey(p.name) === k);
-    const totHhToday = myEntriesToday.reduce((sum, p) => sum + p.hours + (p.extra || 0), 0);
+    const stats = getWorkerDayHours(day, w.name);
 
+    let badgeClass = 'border-slate-200';
     let statusText = '';
     if (isAlreadyInThis) {
-      statusText = '· (Ya asignado a esta actividad)';
-    } else if (totHhToday > 0) {
-      const remainingNormal = Math.max(0, 9 - totHhToday);
-      statusText = `· (${num(totHhToday)} h hoy · ${num(remainingNormal)} h normales restantes)`;
+      statusText = '<span style="color:#0369a1;font-weight:600">· Ya asignado a esta actividad</span>';
+    } else if (stats.normalHours === 0) {
+      statusText = '<span style="color:#16a34a;font-weight:600">· 0/9h (9h normales disponibles)</span>';
+    } else if (stats.remainingNormal > 0) {
+      statusText = `<span style="color:#d97706;font-weight:600">· Lleva ${num(stats.normalHours)}h (quedan ${num(stats.remainingNormal)}h normales)</span>`;
     } else {
-      statusText = '· (Jornada completa disponible · 9 h)';
+      statusText = `<span style="color:#7c3aed;font-weight:600">· 9/9h completas${stats.extraHours > 0 ? ` (+${num(stats.extraHours)}h extra)` : ' (nuevas horas serán extras)'}</span>`;
     }
 
     return `<label class="multi-select-item ${isAlreadyInThis ? 'disabled' : ''}">
-      <input type="checkbox" name="selected_workers" value="${esc(w.name)}" data-role="${esc(w.role)}" ${isAlreadyInThis ? 'disabled checked' : ''}>
+      <input type="checkbox" name="selected_workers" value="${esc(w.name)}" data-role="${esc(w.role)}" data-rem-normal="${stats.remainingNormal}" ${isAlreadyInThis ? 'disabled checked' : ''}>
       <div class="item-info">
-        <strong>${esc(w.name)}</strong>
-        <span>${esc(w.role)} ${statusText}</span>
+        <strong>${esc(w.name)} <small style="font-weight:400;color:var(--muted)">(${esc(w.role)})</small></strong>
+        <span style="font-size:0.75rem">${statusText}</span>
       </div>
     </label>`;
   }).join('');

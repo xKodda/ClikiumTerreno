@@ -347,14 +347,14 @@ export async function diffAndSave(oldState, newState) {
       }
     }
 
-    // 5. Guardar Personal (limpiar y reinsertar con deduplicación por nombre)
+    // 5. Guardar Personal (soporta múltiples asignaciones por persona para distribuir sus 9h)
     try {
       await supabase.from('crew_entries').delete().eq('day_id', newDay.id);
       if (newDay.crew && newDay.crew.length > 0) {
         const seenCrew = new Set();
         const uniqueCrew = [];
         for (const c of newDay.crew) {
-          const k = (c.name || '').trim().toLowerCase();
+          const k = `${(c.name || '').trim().toLowerCase()}:::${(c.assignment || '').trim().toLowerCase()}`;
           if (!seenCrew.has(k)) {
             seenCrew.add(k);
             uniqueCrew.push(c);
@@ -372,12 +372,21 @@ export async function diffAndSave(oldState, newState) {
       console.warn("Excepción personal:", crewErr);
     }
 
-    // 6. Guardar Maquinaria
+    // 6. Guardar Maquinaria (soporta múltiples asignaciones por equipo)
     try {
       await supabase.from('machine_entries').delete().eq('day_id', newDay.id);
       if (newDay.machines && newDay.machines.length > 0) {
+        const seenMach = new Set();
+        const uniqueMach = [];
+        for (const m of newDay.machines) {
+          const k = `${(m.name || '').trim().toLowerCase()}:::${(m.assignment || '').trim().toLowerCase()}`;
+          if (!seenMach.has(k)) {
+            seenMach.add(k);
+            uniqueMach.push(m);
+          }
+        }
         const { error: mErr } = await supabase.from('machine_entries').insert(
-          newDay.machines.map(m => ({
+          uniqueMach.map(m => ({
             id: m.id, day_id: newDay.id, name: m.name, operator: m.operator || '',
             assignment: m.assignment || '', hours: Number(m.hours) || 0, standby: Number(m.standby) || 0
           }))

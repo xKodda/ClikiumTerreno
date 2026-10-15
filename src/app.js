@@ -10,7 +10,7 @@ import {
   projectDisplayName, normalizeProjectId,
   formatActivityMeta, parseActivityMeta, isLayerActivity, isLoadingActivity,
   isLoadingOnlyActivity, isTransferActivity, isDirectMeasurementActivity, getDefaultUnit,
-  getMachineForOperator
+  getMachineForOperator, getWorkerDayHours, splitWorkerHours
 } from './utils.js';
 
 import {
@@ -20,7 +20,7 @@ import {
 } from './state.js';
 
 import {
-  modal, showDialog, startForm, activityForm, resourceForm, multiPersonForm,
+  modal, showDialog, startForm, activityForm, resourceForm, renderWorkerBalanceCard, multiPersonForm,
   renderMultiPersonWorkerList, multiMachineForm, renderMultiMachineList, copyYesterdayCrewForm, controlForm, annulForm, updateActivityForm, updateQuantityForm,
   updateSectorForm, updateLayerForm, repeatPreviousActivity, detail, demo
 } from './dialogs.js';
@@ -122,7 +122,8 @@ document.addEventListener('click', async event => {
     if (action === 'edit-activity') return activityForm(dayId, id);
     if (action === 'annul-activity') return annulForm(dayId, id);
     if (action === 'add-control') return controlForm(dayId, id);
-    if (action === 'add-person') return resourceForm(id, 'person');
+    if (action === 'add-person') return resourceForm(id, 'person', '', button.dataset.worker || button.dataset.workerName || '');
+    if (action === 'add-person-for-worker') return resourceForm(dayId, 'person', '', button.dataset.worker || button.dataset.workerName || '');
     if (action === 'add-multi-person') return multiPersonForm(id);
     if (action === 'assign-crew') return multiPersonForm(dayId, id);
     if (action === 'copy-yesterday-crew') return copyYesterdayCrewForm(id);
@@ -263,10 +264,79 @@ function markUserTouched(event) {
   el.dataset.userTouched = '1';
 }
 
+function updateWorkerHoursFeedback(form, workerChanged = false) {
+  if (!form || form.dataset.form !== 'person') return;
+  const day = selectedDay();
+  if (!day) return;
+
+  const nameInput = $('#worker-name-input', form);
+  const hoursInput = $('#worker-hours-input', form);
+  const extraInput = $('#worker-extra-input', form);
+  const hintEl = $('#worker-hours-hint', form);
+  const alertEl = $('#worker-hours-alert', form);
+  const balanceCard = $('#worker-balance-card', form);
+  const recordId = form.dataset.recordId || '';
+
+  const workerName = nameInput?.value?.trim() || '';
+  if (!workerName) {
+    if (balanceCard) balanceCard.style.display = 'none';
+    if (alertEl) alertEl.style.display = 'none';
+    return;
+  }
+
+  const stats = getWorkerDayHours(day, workerName, recordId);
+
+  if (balanceCard) {
+    balanceCard.outerHTML = renderWorkerBalanceCard(day, workerName, recordId);
+  }
+
+  if (hintEl) {
+    hintEl.innerHTML = `Disponibles normales hoy: <b>${num(stats.remainingNormal)} h</b>`;
+  }
+
+  if (workerChanged && hoursInput && !hoursInput.dataset.userTouched && !recordId) {
+    hoursInput.value = stats.remainingNormal > 0 ? stats.remainingNormal : 0;
+    if (extraInput && stats.remainingNormal === 0) {
+      extraInput.value = 2;
+    }
+  }
+
+  const reqH = Number(hoursInput?.value) || 0;
+  const reqEx = Number(extraInput?.value) || 0;
+
+  if (alertEl && reqH > 0) {
+    const split = splitWorkerHours(day, workerName, reqH, reqEx, recordId);
+    if (split.overflow > 0) {
+      alertEl.style.display = 'block';
+      alertEl.style.background = '#fef3c7';
+      alertEl.style.color = '#92400e';
+      alertEl.style.border = '1px solid #fde68a';
+      alertEl.innerHTML = `⚠️ <strong>Tope de 9h de jornada:</strong> Se asignarán <strong>${num(split.normal)} h normales</strong> (completando sus 9h) y <strong>${num(split.overflow)} h pasarán automáticamente a Horas Extra</strong> para asegurar el pago del maestro.`;
+    } else {
+      const leftAfter = Math.max(0, split.remainingBefore - split.normal);
+      alertEl.style.display = 'block';
+      alertEl.style.background = '#f0fdf4';
+      alertEl.style.color = '#166534';
+      alertEl.style.border = '1px solid #bbf7d0';
+      alertEl.innerHTML = `✅ Se asignarán <strong>${num(split.normal)} h normales</strong>. Le quedarán <strong>${num(leftAfter)} h normales disponibles</strong> en la jornada.`;
+    }
+  } else if (alertEl) {
+    alertEl.style.display = 'none';
+  }
+}
+
 document.addEventListener('input', event => {
   if (event.target.closest('[data-form="activity"]')) {
     markUserTouched(event);
     updateActivityForm();
+  }
+  const personForm = event.target.closest('[data-form="person"]');
+  if (personForm) {
+    if (event.target.id === 'worker-hours-input' || event.target.id === 'worker-extra-input') {
+      event.target.dataset.userTouched = '1';
+    }
+    const isWorkerName = event.target.id === 'worker-name-input';
+    updateWorkerHoursFeedback(personForm, isWorkerName);
   }
   if (event.target.id === 'history-search') {
     stateStore.historySearch = event.target.value;
@@ -281,6 +351,10 @@ document.addEventListener('change', event => {
   if (event.target.closest('[data-form="activity"]')) {
     markUserTouched(event);
     updateActivityForm();
+  }
+  const personFormChange = event.target.closest('[data-form="person"]');
+  if (personFormChange && event.target.id === 'worker-name-input') {
+    updateWorkerHoursFeedback(personFormChange, true);
   }
   const id = event.target.id;
   if (id === 'single-activity-select') {
@@ -560,16 +634,33 @@ document.addEventListener('submit', async event => {
         if (person) {
           const existingSameAct = day.crew.find(r => r.id !== form.dataset.recordId && nameKey(r.name) === nameKey(nameVal) && ((targetAct && r.activityId === targetAct.id) || (finalAsg && nameKey(r.assignment) === nameKey(finalAsg))));
           if (existingSameAct) throw new Error(`La persona "${nameVal}" ya está asignada a este trabajo. Modifica su registro existente para ajustar las horas.`);
+
+          const split = splitWorkerHours(day, nameVal, number('hours'), number('extra'), form.dataset.recordId);
+          if (split.normal + split.extra > 24) throw new Error('La suma de horas no puede superar 24 h por día.');
+
+          const list = day.crew;
+          const existing = list.find(r => r.id === form.dataset.recordId);
+          const record = {
+            id: existing?.id || uid(), name: nameVal, assignment: finalAsg,
+            hours: split.normal, extra: split.extra, role: val('role'),
+            activityId: targetAct?.id || existing?.activityId || null
+          };
+          if (existing) Object.assign(existing, record); else list.push(record);
+
+          if (split.overflow > 0) {
+            toast(`ℹ️ ${nameVal}: ${num(split.normal)}h normales y ${num(split.overflow)}h asignadas como Horas Extra (completó sus 9h de faena).`);
+          }
+        } else {
+          if (number('hours') + number('standby') > 24) throw new Error('La suma de horas no puede superar 24 h por día.');
+          const list = day.machines;
+          const existing = list.find(r => r.id === form.dataset.recordId);
+          const record = {
+            id: existing?.id || uid(), name: nameVal, assignment: finalAsg, hours: number('hours'),
+            operator: val('operator'), standby: number('standby'),
+            activityId: targetAct?.id || existing?.activityId || null
+          };
+          if (existing) Object.assign(existing, record); else list.push(record);
         }
-        if (number('hours') + number(person ? 'extra' : 'standby') > 24) throw new Error('La suma de horas no puede superar 24 h por día.');
-        const list = person ? day.crew : day.machines;
-        const existing = list.find(r => r.id === form.dataset.recordId);
-        const record = {
-          id: existing?.id || uid(), name: nameVal, assignment: finalAsg, hours: number('hours'),
-          activityId: targetAct?.id || existing?.activityId || null,
-          ...(person ? { role: val('role'), extra: number('extra') } : { operator: val('operator'), standby: number('standby') })
-        };
-        if (existing) Object.assign(existing, record); else list.push(record);
 
       } else if (type === 'multi-machine') {
         const checkboxes = form.querySelectorAll('input[name="selected_machines"]:checked:not(:disabled)');
@@ -621,6 +712,7 @@ document.addEventListener('submit', async event => {
 
         if (h + ex > 24) throw new Error('La suma de horas no puede superar 24 h por día.');
         let added = 0;
+        let withOvertime = 0;
         for (const cb of checkboxes) {
           const wName = cb.value;
           // Validar que no esté ya asignado a esta misma actividad
@@ -632,18 +724,25 @@ document.addEventListener('submit', async event => {
           );
           if (alreadyInThis) continue;
 
+          const split = splitWorkerHours(day, wName, h, ex);
+          if (split.overflow > 0) withOvertime++;
+
           day.crew.push({
             id: uid(),
             name: wName,
             role: cb.dataset.role || 'M1',
-            hours: h,
-            extra: ex,
+            hours: split.normal,
+            extra: split.extra,
             assignment: asg,
             activityId: actIdToSave
           });
           added++;
         }
-        toast(`Se asignaron ${added} trabajadores a la actividad.`);
+        if (withOvertime > 0) {
+          toast(`Se asignaron ${added} trabajadores. En ${withOvertime} de ellos, el excedente sobre las 9h normales pasó automáticamente a Horas Extra.`);
+        } else {
+          toast(`Se asignaron ${added} trabajadores a la actividad.`);
+        }
 
       } else if (type === 'copy-crew') {
         const workerCbs = form.querySelectorAll('input[name="copy_crew"]:checked:not(:disabled)');

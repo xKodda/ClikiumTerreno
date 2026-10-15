@@ -425,3 +425,47 @@ export function toast(message) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('show'), 4500);
 }
+
+export const STANDARD_NORMAL_HOURS = 9;
+
+/**
+ * Calcula las horas normales, extras y disponibles de un trabajador en la jornada.
+ * @param {Object} day - Objeto jornada.
+ * @param {string} workerName - Nombre del trabajador.
+ * @param {string} [excludeEntryId] - ID de registro a excluir (para edición).
+ */
+export const getWorkerDayHours = (day, workerName, excludeEntryId = '') => {
+  if (!day || !day.crew || !workerName) {
+    return { normalHours: 0, extraHours: 0, totalHours: 0, remainingNormal: STANDARD_NORMAL_HOURS, entries: [] };
+  }
+  const k = nameKey(workerName);
+  const entries = day.crew.filter(p => nameKey(p.name) === k && (!excludeEntryId || p.id !== excludeEntryId));
+  const normalHours = entries.reduce((sum, p) => sum + (Number(p.hours) || 0), 0);
+  const extraHours = entries.reduce((sum, p) => sum + (Number(p.extra) || 0), 0);
+  const totalHours = normalHours + extraHours;
+  const remainingNormal = Math.max(0, STANDARD_NORMAL_HOURS - normalHours);
+
+  return { normalHours, extraHours, totalHours, remainingNormal, entries };
+};
+
+/**
+ * Desglosa las horas solicitadas para un trabajador en horas normales y extras según el tope de 9h.
+ * Evita errores donde la empresa no reconozca horas extras por haber sido ingresadas como normales.
+ */
+export const splitWorkerHours = (day, workerName, requestedHours, requestedExtra = 0, excludeEntryId = '') => {
+  const stats = getWorkerDayHours(day, workerName, excludeEntryId);
+  const reqH = Math.max(0, Number(requestedHours) || 0);
+  const reqEx = Math.max(0, Number(requestedExtra) || 0);
+
+  const assignedNormal = Math.min(reqH, stats.remainingNormal);
+  const overflow = Math.max(0, reqH - stats.remainingNormal);
+  const assignedExtra = reqEx + overflow;
+
+  return {
+    normal: assignedNormal,
+    extra: assignedExtra,
+    overflow,
+    remainingBefore: stats.remainingNormal,
+    stats
+  };
+};
