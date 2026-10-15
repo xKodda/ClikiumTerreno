@@ -102,10 +102,7 @@ export function renderDay() {
     </div>
     <div class="heading-actions">
       <button class="btn btn-secondary" data-action="report" data-id="${day.id}">${icon('report')}Informe diario</button>
-      ${!day.closedAt 
-        ? primary('add-activity', '+ Registrar avance', day.id) 
-        : `<button class="btn btn-primary btn-reopen" data-action="reopen-day" data-id="${day.id}">Reabrir jornada</button>`
-      }
+      ${!day.closedAt ? primary('add-activity', '+ Registrar avance', day.id) : ''}
     </div>
   </div>
   ${day.isDemo ? '<div class="notice">Jornada de ejemplo. Estos registros son demostrativos y no corresponden a producción real. Puedes iniciar tu propia jornada desde Respaldo. <button class="btn btn-sm btn-secondary" data-action="delete-demo" style="margin-left:12px">Eliminar jornada de ejemplo</button></div>' : ''}
@@ -126,7 +123,7 @@ export function renderDay() {
   <div class="activity-layout">
     <section>
       <div class="section-head"><h2>Avances del día</h2><span class="muted">${photos} fotos adjuntas</span></div>
-      <div class="activity-list">${activities.length ? activities.map(a => activityCard(a, day)).join('') : empty('Tu primer avance', 'Registra lo que está pasando en terreno. Puedes dejar la ejecución en curso.', !day.closedAt ? primary('add-activity', 'Registrar avance', day.id) : `<button class="btn btn-primary btn-reopen" data-action="reopen-day" data-id="${day.id}">Reabrir jornada para registrar</button>`)}</div>
+      <div class="activity-list">${activities.length ? activities.map(a => activityCard(a, day)).join('') : empty(day.closedAt ? 'Jornada cerrada' : 'Tu primer avance', day.closedAt ? 'Esta jornada fue cerrada. Puedes consultar su informe o gestionarla desde el Historial.' : 'Registra lo que está pasando en terreno. Puedes dejar la ejecución en curso.', !day.closedAt ? primary('add-activity', 'Registrar avance', day.id) : '')}</div>
     </section>
     <aside class="side-panel">
       <h3>${day.closedAt ? 'Registro de la jornada' : 'Registro rápido'}</h3>

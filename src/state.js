@@ -106,21 +106,35 @@ export const allActivities = () => (stateStore.state?.days || []).flatMap(day =>
 export const selectedDay = () => {
   const days = stateStore.state?.days || [];
   const s = stateStore.state?.settings || {};
+  const currentToday = today();
+  const sProj = normalizeProjectId(s.project);
+
+  // 1. Si el usuario seleccionó explícitamente una jornada (ej. desde el Historial)
   if (stateStore.selectedDayId) {
     const found = days.find(d => d.id === stateStore.selectedDayId);
     if (found) return found;
   }
-  const sProj = normalizeProjectId(s.project);
-  const openDays = days.filter(d => !d.isDemo && !d.closedAt && (s.userId ? foremanId(d) === s.userId : nameKey(d.user) === nameKey(s.user)) && normalizeProjectId(d.project) === sProj);
-  if (openDays.length) return openDays.sort((a, b) => b.date.localeCompare(a.date) || (b.startedAt || '').localeCompare(a.startedAt || ''))[0];
-  
-  const anyOpen = days.filter(d => !d.isDemo && !d.closedAt);
-  if (anyOpen.length) return anyOpen.sort((a, b) => b.date.localeCompare(a.date) || (b.startedAt || '').localeCompare(a.startedAt || ''))[0];
 
-  const todayDay = days.find(d => d.date === today() && (s.userId ? foremanId(d) === s.userId : nameKey(d.user) === nameKey(s.user)) && normalizeProjectId(d.project) === sProj && !d.isDemo);
-  if (todayDay) return todayDay;
-  const sorted = [...days].filter(d => !d.isDemo).sort((a, b) => b.date.localeCompare(a.date));
-  return sorted[0];
+  // 2. Buscar jornada en curso (abierta) de HOY para este capataz y proyecto
+  const todayOpen = days.find(d => !d.isDemo && !d.closedAt && d.date === currentToday && (s.userId ? foremanId(d) === s.userId : nameKey(d.user) === nameKey(s.user)) && normalizeProjectId(d.project) === sProj);
+  if (todayOpen) return todayOpen;
+
+  // 3. Cualquier jornada abierta de HOY en el proyecto
+  const anyTodayOpen = days.find(d => !d.isDemo && !d.closedAt && d.date === currentToday && normalizeProjectId(d.project) === sProj);
+  if (anyTodayOpen) return anyTodayOpen;
+
+  // 4. Si existe una jornada de HOY aunque ya esté cerrada
+  const todayClosed = days.find(d => !d.isDemo && d.date === currentToday && (s.userId ? foremanId(d) === s.userId : nameKey(d.user) === nameKey(s.user)) && normalizeProjectId(d.project) === sProj);
+  if (todayClosed) return todayClosed;
+
+  // 5. Cualquier jornada que haya quedado abierta (sin cerrar) de fechas anteriores
+  const anyOpen = days.filter(d => !d.isDemo && !d.closedAt);
+  if (anyOpen.length) {
+    return anyOpen.sort((a, b) => b.date.localeCompare(a.date) || (b.startedAt || '').localeCompare(a.startedAt || ''))[0];
+  }
+
+  // 6. Si no hay jornada de hoy ni jornadas abiertas, retornamos null para que el inicio invite a "Iniciar jornada" del día actual
+  return null;
 };
 
 export const metadata = id => stateStore.media.find(m => m.id === id);
@@ -132,7 +146,9 @@ export { getMediaUrl };
 
 export const capatazField = () => {
   const capataces = stateStore.catalog?.capataces || [{ id: 'christofer_godoy', nombre: 'Christofer Godoy' }];
-  return `<label class="field"><span>Capataz</span><select name="userId" required>${capataces.map(p => `<option value="${esc(p.id)}" selected>${esc(p.nombre)}</option>`).join('')}</select></label>`;
+  const savedId = stateStore.state?.settings?.userId;
+  const current = capataces.some(p => p.id === savedId) ? savedId : capataces[0]?.id;
+  return `<label class="field"><span>Capataz</span><select name="userId" required>${capataces.map(p => `<option value="${esc(p.id)}" ${p.id === current ? 'selected' : ''}>${esc(p.nombre)}</option>`).join('')}</select></label>`;
 };
 
 const FALLBACK_SECTOR_GROUPS = [

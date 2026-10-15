@@ -138,7 +138,10 @@ document.addEventListener('click', async event => {
       const nowStr = new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
       const auditNote = `[Jornada reabierta ${nowStr} hrs por ${user}]`;
       day.notes = day.notes ? `${day.notes}\n${auditNote}` : auditNote;
+      stateStore.selectedDayId = id;
+      localStorage.setItem('clikium_selected_day_id', id);
       await save(nextState);
+      stateStore.view = 'today';
       render();
       toast('Jornada reabierta. Ya puedes registrar o corregir avances.');
       return;
@@ -227,8 +230,22 @@ document.addEventListener('click', async event => {
   }
 });
 
+/** Marca los campos modificados por el usuario para que los valores por defecto no los sobrescriban. */
+function markUserTouched(event) {
+  const el = event.target;
+  if (!event.isTrusted || !el?.name || !el.closest('[data-form="activity"]')) return;
+  if (el.name === 'activity') {
+    // Nueva actividad: se vuelven a aplicar los valores por defecto de los campos dependientes.
+    const form = el.form;
+    ['unit', 'requiredControls', 'process'].forEach(n => { if (form?.elements[n]) delete form.elements[n].dataset.userTouched; });
+    return;
+  }
+  el.dataset.userTouched = '1';
+}
+
 document.addEventListener('input', event => {
   if (event.target.closest('[data-form="activity"]')) {
+    markUserTouched(event);
     updateActivityForm();
   }
   if (event.target.id === 'history-search') {
@@ -242,6 +259,7 @@ document.addEventListener('input', event => {
 
 document.addEventListener('change', event => {
   if (event.target.closest('[data-form="activity"]')) {
+    markUserTouched(event);
     updateActivityForm();
   }
   const id = event.target.id;
@@ -618,19 +636,36 @@ async function load() {
   }
 
   // Eventos de reconexión y visibilidad móvil
+  let lastRenderedDate = today();
   window.addEventListener('online', () => {
     if (stateStore.pendingSyncState) retrySync(render);
   });
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
       if (stateStore.state) persistLocalState(stateStore.state);
-    } else if (document.visibilityState === 'visible' && navigator.onLine && stateStore.pendingSyncState) {
-      retrySync(render);
+    } else if (document.visibilityState === 'visible') {
+      const currentToday = today();
+      if (currentToday !== lastRenderedDate) {
+        lastRenderedDate = currentToday;
+        render();
+      }
+      if (navigator.onLine && stateStore.pendingSyncState) {
+        retrySync(render);
+      }
     }
   });
   window.addEventListener('pagehide', () => {
     if (stateStore.state) persistLocalState(stateStore.state);
   });
+
+  // Chequeo periódico de reloj para cambio de día a medianoche (00:00+)
+  setInterval(() => {
+    const currentToday = today();
+    if (currentToday !== lastRenderedDate) {
+      lastRenderedDate = currentToday;
+      render();
+    }
+  }, 10000);
 
   // Reintento periódico en segundo plano
   setInterval(() => {

@@ -12,9 +12,13 @@ export const uid = () => `r${Date.now().toString(36)}${Math.random().toString(36
 
 export const now = () => new Date().toISOString();
 
-export const today = () => new Intl.DateTimeFormat('en-CA', {
-  timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit'
-}).format(new Date());
+export const today = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 export const num = value => new Intl.NumberFormat('es-CL', {
   maximumFractionDigits: 2

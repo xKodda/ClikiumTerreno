@@ -85,7 +85,7 @@ export function updateLayerForm() {
     }
   }
   const processSel = form.elements.process;
-  if (processSel) {
+  if (processSel && !processSel.dataset.userTouched) {
     if (lType === 'terraplen_4' || lType === 'terraplen_6') {
       if (['Movimiento de tierra', 'Relleno estructural', 'Otro'].includes(processSel.value)) {
         processSel.value = 'Terraplén';
@@ -96,6 +96,11 @@ export function updateLayerForm() {
       }
     }
   }
+}
+
+/** Protege los valores cargados (edición / repetir anterior) frente a los valores por defecto automáticos. */
+function markLoadedValuesAsTouched(form) {
+  ['unit', 'requiredControls', 'process'].forEach(n => { if (form.elements[n]) form.elements[n].dataset.userTouched = '1'; });
 }
 
 export function updateActivityForm() {
@@ -191,7 +196,7 @@ export function updateActivityForm() {
       if (form.elements.quantity) form.elements.quantity.required = true;
 
       const defUnit = getDefaultUnit(act, procSelect?.value);
-      if (unitSelect && (!unitSelect.dataset.userTouched || (unitSelect.value === 'm³' && defUnit !== 'm³'))) {
+      if (unitSelect && !unitSelect.dataset.userTouched) {
         unitSelect.value = defUnit;
       }
     } else {
@@ -236,6 +241,7 @@ export function repeatPreviousActivity(dayId) {
   if (form.elements.stage) form.elements.stage.value = 'Terminado';
   if (form.elements.description) form.elements.description.value = '';
   if (form.elements.notes) form.elements.notes.value = '';
+  markLoadedValuesAsTouched(form);
 
   updateActivityForm();
   toast('Datos copiados de la actividad anterior. Completa cantidad y fotos.');
@@ -425,6 +431,8 @@ export function activityForm(dayId, activityId = '', preset = '') {
     };
     if (form.elements.pkStart) form.elements.pkStart.addEventListener('blur', handlePkBlur);
     if (form.elements.pkEnd) form.elements.pkEnd.addEventListener('blur', handlePkBlur);
+    // Al editar, los valores guardados no deben ser reemplazados por los valores por defecto.
+    if (a) markLoadedValuesAsTouched(form);
   }
 
   updateActivityForm();

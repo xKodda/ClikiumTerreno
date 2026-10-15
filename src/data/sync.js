@@ -226,7 +226,20 @@ export async function diffAndSave(oldState, newState) {
         process: act.process,
         sector: act.sector,
         stage: act.stage || 'Terminado',
-        unit: act.unit || 'm³',
+        unit: (() => {
+          let u = String(act.unit || '').trim();
+          if (act.mode === 'trips') return 'm³';
+          if (!u) return 'm³';
+          if (u.startsWith('m³') || u === 'm3') return 'm³';
+          if (u.startsWith('ml')) return 'ml';
+          if (u.startsWith('m²') || u === 'm2') return 'm²';
+          if (u.startsWith('un')) return 'un';
+          if (u.startsWith('kg')) return 'kg';
+          if (u.toLowerCase().includes('lineal')) return 'm lineales';
+          if (u.toLowerCase().includes('tubo')) return 'tubos';
+          if (u.toLowerCase().includes('capa')) return 'capas';
+          return u;
+        })(),
         required_controls: act.requiredControls || 'both',
         pk_start: act.pkStart || null,
         pk_end: act.pkEnd || null,

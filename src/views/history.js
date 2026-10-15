@@ -25,18 +25,26 @@ export function renderHistory() {
     <button class="btn btn-secondary" data-action="clear-history">Limpiar</button>
   </div>
   <div class="history-grid">
-    ${days.map(d => `<button class="history-card" data-action="open-day" data-id="${d.id}">
-      <div class="card-top">
-        <span class="card-sector">${esc(projectDisplayName(d.project))}${d.isDemo ? ' · EJEMPLO' : ''}</span>
-        <span class="badge ${d.closedAt ? 'approved' : 'pending'}">${d.closedAt ? 'Cerrada' : 'Abierta'}</span>
+    ${days.map(d => `<article class="history-card" style="display:flex;flex-direction:column;justify-content:space-between">
+      <div>
+        <div class="card-top">
+          <span class="card-sector">${esc(projectDisplayName(d.project))}${d.isDemo ? ' · EJEMPLO' : ''}</span>
+          <span class="badge ${d.closedAt ? 'approved' : 'pending'}">${d.closedAt ? 'Cerrada' : 'Abierta'}</span>
+        </div>
+        <h3 style="cursor:pointer;margin:12px 0 6px" data-action="open-day" data-id="${d.id}">${esc(dateLabel(d.date))}</h3>
+        <span class="muted">${esc(d.user)}</span>
       </div>
-      <h3>${esc(dateLabel(d.date))}</h3>
-      <span class="muted">${esc(d.user)}</span>
-      <div class="history-foot">
-        <span>${d.activities.length} actividades · ${d.activities.reduce((n, a) => n + a.photoIds.length, 0)} fotos</span>
-        <span>${d.activities.filter(a => getActivityStatus(a) === 'Control pendiente').length} pendientes</span>
+      <div>
+        <div class="history-foot">
+          <span>${d.activities.length} actividades · ${d.activities.reduce((n, a) => n + a.photoIds.length, 0)} fotos</span>
+          <span>${d.activities.filter(a => getActivityStatus(a) === 'Control pendiente').length} pendientes</span>
+        </div>
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid #edf1f3;display:flex;gap:8px;justify-content:flex-end;align-items:center;flex-wrap:wrap">
+          <button type="button" class="btn btn-sm btn-secondary" data-action="open-day" data-id="${d.id}">Ver jornada</button>
+          ${d.closedAt ? `<button type="button" class="btn btn-sm btn-primary" data-action="reopen-day" data-id="${d.id}">Reabrir jornada</button>` : ''}
+        </div>
       </div>
-    </button>`).join('')}
+    </article>`).join('')}
   </div>
   ${!days.length ? empty('No hay jornadas para este filtro', 'Prueba con otro mes o inicia una jornada.') : ''}`;
 }

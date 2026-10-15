@@ -111,7 +111,7 @@ create table public.activities (
   sector             text not null check (length(trim(sector)) between 1 and 200
                                           and sector !~* '\meje\s+\d+(\s*[-–]\s*\d+)+'),
   stage              text not null check (stage in ('En curso', 'Terminado')),
-  unit               text not null check (unit in ('m³', 'm lineales', 'tubos', 'capas', '%')),
+  unit               text not null check (length(trim(unit)) > 0),
   required_controls  text not null default 'both' check (required_controls in ('both', 'lab', 'top', 'none')),
   pk_start           text check (pk_start ~ '^\d{1,3}\+\d{3}(\.\d{1,2})?$'),
   pk_end             text check (pk_end   ~ '^\d{1,3}\+\d{3}(\.\d{1,2})?$'),
