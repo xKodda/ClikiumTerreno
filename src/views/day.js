@@ -88,6 +88,7 @@ export function renderDay() {
   const photos = activities.reduce((n, a) => n + a.photoIds.length, 0);
 
   const isClosed = Boolean(day.closedAt);
+  const isPast = day.date !== today();
   const statusPill = isClosed
     ? `<span class="day-status-pill status-closed">● Cerrada</span>`
     : `<span class="day-status-pill status-open">● En curso</span>`;
@@ -97,15 +98,28 @@ export function renderDay() {
       <div class="day-status-bar">
         ${statusPill}
         <span class="day-date-text">${esc(dateLabel(day.date))}</span>
+        ${isPast ? `<button class="text-button" data-action="go-today" style="margin-left:8px;font-size:0.8rem;text-decoration:underline">← Ir a jornada de hoy</button>` : ''}
       </div>
-      <h1 class="day-title">${day.date === today() ? 'Jornada de hoy' : 'Jornada de terreno'}</h1>
+      <h1 class="day-title">${!isPast ? 'Jornada de hoy' : 'Jornada de terreno'}</h1>
     </div>
     <div class="heading-actions">
       <button class="btn btn-secondary" data-action="report" data-id="${day.id}">${icon('report')}Informe diario</button>
-      ${!day.closedAt ? primary('add-activity', '+ Registrar avance', day.id) : ''}
+      ${isClosed
+        ? `<button class="btn btn-primary" data-action="reopen-day" data-id="${day.id}">${icon('refresh')}Reabrir jornada</button>`
+        : primary('add-activity', '+ Registrar avance', day.id)
+      }
     </div>
   </div>
   ${day.isDemo ? '<div class="notice">Jornada de ejemplo. Estos registros son demostrativos y no corresponden a producción real. Puedes iniciar tu propia jornada desde Respaldo. <button class="btn btn-sm btn-secondary" data-action="delete-demo" style="margin-left:12px">Eliminar jornada de ejemplo</button></div>' : ''}
+  ${isClosed ? `
+    <div class="notice" style="background:#f1f5f9;border:1px solid #cbd5e1;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 16px;border-radius:12px;margin-bottom:16px">
+      <div>
+        <strong style="color:#1e293b">Jornada cerrada a las ${timeOnly(day.closedAt)}.</strong>
+        <span class="muted" style="display:block;font-size:0.83rem;margin-top:2px">Para agregar nuevos avances o corregir registros en terreno, puedes reabrir la jornada.</span>
+      </div>
+      <button class="btn btn-sm btn-primary" data-action="reopen-day" data-id="${day.id}">${icon('refresh')} Reabrir jornada</button>
+    </div>
+  ` : ''}
   <div class="stats">
     <div class="stat"><div class="stat-label">Actividades registradas</div><div class="stat-value">${activities.length}<small>registros</small></div><div class="stat-note">${activeActivities.filter(a => activityStage(a) === 'Terminado').length} terminadas${annulledCount ? ` · ${annulledCount} anuladas` : ''}</div></div>
     <div class="stat stat-volumes">
@@ -123,7 +137,7 @@ export function renderDay() {
   <div class="activity-layout">
     <section>
       <div class="section-head"><h2>Avances del día</h2><span class="muted">${photos} fotos adjuntas</span></div>
-      <div class="activity-list">${activities.length ? activities.map(a => activityCard(a, day)).join('') : empty(day.closedAt ? 'Jornada cerrada' : 'Tu primer avance', day.closedAt ? 'Esta jornada fue cerrada. Puedes consultar su informe o gestionarla desde el Historial.' : 'Registra lo que está pasando en terreno. Puedes dejar la ejecución en curso.', !day.closedAt ? primary('add-activity', 'Registrar avance', day.id) : '')}</div>
+      <div class="activity-list">${activities.length ? activities.map(a => activityCard(a, day)).join('') : empty(day.closedAt ? 'Jornada cerrada' : 'Tu primer avance', day.closedAt ? 'Esta jornada fue cerrada. Puedes reabrirla para continuar registrando avances de hoy.' : 'Registra lo que está pasando en terreno. Puedes dejar la ejecución en curso.', day.closedAt ? `<button class="btn btn-primary" data-action="reopen-day" data-id="${day.id}">${icon('refresh')}Reabrir jornada</button>` : primary('add-activity', 'Registrar avance', day.id))}</div>
     </section>
     <aside class="side-panel">
       <h3>${day.closedAt ? 'Registro de la jornada' : 'Registro rápido'}</h3>
@@ -135,7 +149,10 @@ export function renderDay() {
       <div class="day-info">
         <div>Inicio: <strong>${timeOnly(day.startedAt)}</strong></div>
         <div>${day.closedAt ? `Cierre: <strong>${timeOnly(day.closedAt)}</strong>` : 'Estado: <strong>En curso</strong>'}</div>
-        ${!day.closedAt ? `<button class="text-button" data-action="close-day" data-id="${day.id}">Cerrar jornada</button>` : ''}
+        ${!day.closedAt 
+          ? `<button class="text-button" data-action="close-day" data-id="${day.id}">Cerrar jornada</button>` 
+          : `<button class="btn btn-sm btn-primary" data-action="reopen-day" data-id="${day.id}" style="margin-top:8px;width:100%">${icon('refresh')}Reabrir jornada</button>`
+        }
       </div>
     </aside>
   </div>

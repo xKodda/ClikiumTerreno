@@ -204,10 +204,28 @@ export async function diffAndSave(oldState, newState) {
       dayPayload.created_by = userId;
     }
 
-    const { error: dayErr } = await supabase.from('days').upsert(dayPayload);
+    let { error: dayErr } = await supabase.from('days').upsert(dayPayload);
     if (dayErr) {
-      console.error("Error upsert jornada:", dayErr, dayPayload);
-      throw new Error("Error jornada: " + dayErr.message);
+      if (dayErr.message?.includes('days_one_per_foreman') || dayErr.code === '23505') {
+        console.warn("Jornada ya existía en base de datos con otro ID. Vinculando ID existente...", dayPayload);
+        const { data: existingRemoteDay } = await supabase
+          .from('days')
+          .select('id')
+          .eq('date', dayPayload.date)
+          .eq('project_id', dayPayload.project_id)
+          .maybeSingle();
+
+        if (existingRemoteDay) {
+          newDay.id = existingRemoteDay.id;
+          dayPayload.id = existingRemoteDay.id;
+          const retryRes = await supabase.from('days').upsert(dayPayload);
+          dayErr = retryRes.error;
+        }
+      }
+      if (dayErr) {
+        console.error("Error upsert jornada:", dayErr, dayPayload);
+        throw new Error("Error jornada: " + dayErr.message);
+      }
     }
 
     // 2. Guardar Actividades

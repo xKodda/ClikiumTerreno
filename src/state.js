@@ -29,8 +29,68 @@ export const stateStore = {
   saving: false
 };
 
+export const foremanId = day => day?.userId || stateStore.catalog?.capataces?.find(p => nameKey(p.nombre) === nameKey(day?.user))?.id || '';
+
+/**
+ * Sanitiza el arreglo de jornadas en un estado para asegurar que NUNCA existan
+ * jornadas duplicadas para la misma (fecha, proyecto, capataz).
+ * Si encuentra un duplicado (ej. por iniciar jornada localmente), fusiona actividades y datos
+ * en la jornada canónica y descarta el duplicado huérfano.
+ */
+export function sanitizeStateDays(state) {
+  if (!state || !Array.isArray(state.days)) return state;
+  const seen = new Map();
+  const cleanDays = [];
+
+  for (const day of state.days) {
+    if (day.isDemo) {
+      cleanDays.push(day);
+      continue;
+    }
+    const fId = foremanId(day) || nameKey(day.user);
+    const key = `${day.date}:::${normalizeProjectId(day.project)}:::${fId}`;
+    if (!seen.has(key)) {
+      seen.set(key, day);
+      cleanDays.push(day);
+    } else {
+      // Duplicado encontrado: fusionar actividades y datos en el primer día (canónico)
+      const canonical = seen.get(key);
+      const orphanId = day.id;
+      const targetId = canonical.id;
+
+      if (day.activities && day.activities.length) {
+        canonical.activities = canonical.activities || [];
+        for (const act of day.activities) {
+          if (!canonical.activities.some(a => a.id === act.id)) {
+            const actClone = structuredClone(act);
+            actClone.day_id = targetId;
+            canonical.activities.push(actClone);
+          }
+        }
+      }
+      if (day.crew && day.crew.length && (!canonical.crew || !canonical.crew.length)) {
+        canonical.crew = structuredClone(day.crew);
+      }
+      if (day.machines && day.machines.length && (!canonical.machines || !canonical.machines.length)) {
+        canonical.machines = structuredClone(day.machines);
+      }
+      if (day.notes && !canonical.notes) {
+        canonical.notes = day.notes;
+      }
+      if (stateStore.selectedDayId === orphanId) {
+        stateStore.selectedDayId = targetId;
+        try { localStorage.setItem(SELECTED_DAY_KEY, targetId); } catch (e) {}
+      }
+    }
+  }
+
+  state.days = cleanDays;
+  return state;
+}
+
 export function persistLocalState(state) {
   if (!state) return;
+  sanitizeStateDays(state);
   try {
     localStorage.setItem(LOCAL_CACHE_KEY, JSON.stringify(state));
   } catch (e) {
@@ -39,8 +99,8 @@ export function persistLocalState(state) {
 }
 
 export function mergePendingWithRemote(remoteState, pendingState) {
-  if (!remoteState) return pendingState;
-  if (!pendingState) return remoteState;
+  if (!remoteState) return sanitizeStateDays(pendingState);
+  if (!pendingState) return sanitizeStateDays(remoteState);
 
   const resultState = structuredClone(remoteState);
   resultState.settings = { ...remoteState.settings, ...pendingState.settings };
@@ -49,11 +109,27 @@ export function mergePendingWithRemote(remoteState, pendingState) {
   const pendingDays = pendingState.days || [];
 
   for (const pDay of pendingDays) {
-    const existingIndex = remoteDays.findIndex(d => d.id === pDay.id);
+    let existingIndex = remoteDays.findIndex(d => d.id === pDay.id);
+    
+    // Si no coincide el ID exacto y no es demo, buscar si coincide en (fecha, proyecto, capataz)
+    if (existingIndex === -1 && !pDay.isDemo) {
+      const pProj = normalizeProjectId(pDay.project);
+      const pFId = foremanId(pDay);
+      const pName = nameKey(pDay.user);
+      existingIndex = remoteDays.findIndex(d => 
+        !d.isDemo && 
+        d.date === pDay.date && 
+        normalizeProjectId(d.project) === pProj && 
+        (pFId ? foremanId(d) === pFId : nameKey(d.user) === pName)
+      );
+    }
+
     if (existingIndex === -1) {
       remoteDays.unshift(structuredClone(pDay));
     } else {
       const rDay = remoteDays[existingIndex];
+      const targetId = rDay.id;
+
       if (pDay.notes && !rDay.notes) rDay.notes = pDay.notes;
       if (pDay.closedAt && !rDay.closedAt) rDay.closedAt = pDay.closedAt;
 
@@ -62,7 +138,9 @@ export function mergePendingWithRemote(remoteState, pendingState) {
       for (const pAct of pActivities) {
         const actIndex = rActivities.findIndex(a => a.id === pAct.id);
         if (actIndex === -1) {
-          rActivities.push(structuredClone(pAct));
+          const actClone = structuredClone(pAct);
+          actClone.day_id = targetId;
+          rActivities.push(actClone);
         } else {
           const rAct = rActivities[actIndex];
           const rCtrlIds = new Set((rAct.controls || []).map(c => c.id));
@@ -92,14 +170,18 @@ export function mergePendingWithRemote(remoteState, pendingState) {
       if (pDay.machines && pDay.machines.length > 0) {
         rDay.machines = structuredClone(pDay.machines);
       }
+
+      // Si el usuario tenía seleccionado el ID pendiente huérfano, redirigir al ID remoto
+      if (stateStore.selectedDayId === pDay.id) {
+        stateStore.selectedDayId = targetId;
+        try { localStorage.setItem(SELECTED_DAY_KEY, targetId); } catch (e) {}
+      }
     }
   }
 
   resultState.days = remoteDays;
-  return resultState;
+  return sanitizeStateDays(resultState);
 }
-
-export const foremanId = day => day.userId || stateStore.catalog.capataces.find(p => nameKey(p.nombre) === nameKey(day.user))?.id || '';
 
 export const allActivities = () => (stateStore.state?.days || []).flatMap(day => day.activities.map(a => ({ ...a, day })));
 
@@ -207,6 +289,7 @@ export function editDay(dayId) {
 }
 
 export async function save(nextState) {
+  sanitizeStateDays(nextState);
   stateStore.state = nextState;
   persistLocalState(nextState);
 

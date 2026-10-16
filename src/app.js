@@ -16,7 +16,7 @@ import {
 import {
   stateStore, selectedDay, allActivities, foremanId, amount, metadata,
   save, editDay, updateSaveStatus, retrySync, upload,
-  persistLocalState, mergePendingWithRemote
+  persistLocalState, mergePendingWithRemote, sanitizeStateDays
 } from './state.js';
 
 import {
@@ -109,8 +109,24 @@ document.addEventListener('click', async event => {
     if (action === 'close-modal') return modal.close();
     if (action === 'retry-sync') return await retrySync(render);
     if (action === 'filter-pending-tab') { stateStore.pendingTabFilter = button.dataset.tab; render(); return; }
-    if (action === 'filter-pending-scope') { stateStore.pendingScope = button.dataset.scope; render(); return; }
-    if (action === 'navigate') { stateStore.view = button.dataset.view; render(); return; }
+    if (action === 'go-today') {
+      stateStore.selectedDayId = null;
+      try { localStorage.removeItem('clikium_selected_day_id'); } catch (e) {}
+      stateStore.pendingScope = 'today';
+      stateStore.view = 'today';
+      render();
+      return;
+    }
+    if (action === 'navigate') {
+      if (button.dataset.view === 'today') {
+        stateStore.selectedDayId = null;
+        try { localStorage.removeItem('clikium_selected_day_id'); } catch (e) {}
+        stateStore.pendingScope = 'today';
+      }
+      stateStore.view = button.dataset.view;
+      render();
+      return;
+    }
     if (action === 'set-map-view') { stateStore.mapViewMode = button.dataset.mode; render(); return; }
     if (action === 'open-map-modal') return openMapModal();
     if (action === 'backup-view') { stateStore.view = 'backup'; render(); return; }
@@ -438,22 +454,56 @@ document.addEventListener('submit', async event => {
   try {
     const type = form.dataset.form;
     if (type === 'start') {
-      const nextState = structuredClone(stateStore.state || { settings: {}, days: [] });
-      if (!nextState.days) nextState.days = [];
-      const id = uid();
+      const targetDate = val('date');
       const capataz = stateStore.catalog.capataces.find(p => p.id === val('userId'));
       if (!capataz) throw new Error('Selecciona un capataz registrado.');
       const projId = normalizeProjectId(val('project')) || 'tunel_lo_ruiz';
-      nextState.settings = { ...nextState.settings, project: projId, user: capataz.nombre, userId: capataz.id };
-      nextState.days.push({
-        id, date: val('date'), project: projId, user: capataz.nombre, userId: capataz.id,
-        isDemo: false, startedAt: now(), closedAt: null, notes: '', activities: [], crew: [], machines: []
-      });
-      stateStore.selectedDayId = id;
-      localStorage.setItem('clikium_selected_day_id', id);
-      await save(nextState);
-      stateStore.pendingScope = 'today';
-      stateStore.view = 'today';
+
+      // Verificar si ya existe una jornada para esta fecha, proyecto y capataz
+      const existing = (stateStore.state?.days || []).find(d => 
+        !d.isDemo && 
+        d.date === targetDate && 
+        normalizeProjectId(d.project) === projId && 
+        (foremanId(d) === capataz.id || nameKey(d.user) === nameKey(capataz.nombre))
+      );
+
+      if (existing) {
+        const nextState = structuredClone(stateStore.state);
+        const dayInNext = nextState.days.find(d => d.id === existing.id);
+        nextState.settings = { ...nextState.settings, project: projId, user: capataz.nombre, userId: capataz.id };
+
+        if (dayInNext.closedAt) {
+          dayInNext.closedAt = null;
+          const nowStr = new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+          const auditNote = `[Jornada reabierta ${nowStr} hrs por ${capataz.nombre}]`;
+          dayInNext.notes = dayInNext.notes ? `${dayInNext.notes}\n${auditNote}` : auditNote;
+          stateStore.selectedDayId = dayInNext.id;
+          localStorage.setItem('clikium_selected_day_id', dayInNext.id);
+          await save(nextState);
+          toast(`Jornada del ${dateLabel(targetDate)} reabierta para continuar registrando.`);
+        } else {
+          stateStore.selectedDayId = existing.id;
+          localStorage.setItem('clikium_selected_day_id', existing.id);
+          await save(nextState);
+          toast(`Conectado a la jornada en curso del ${dateLabel(targetDate)}.`);
+        }
+        stateStore.pendingScope = 'today';
+        stateStore.view = 'today';
+      } else {
+        const nextState = structuredClone(stateStore.state || { settings: {}, days: [] });
+        if (!nextState.days) nextState.days = [];
+        const id = uid();
+        nextState.settings = { ...nextState.settings, project: projId, user: capataz.nombre, userId: capataz.id };
+        nextState.days.push({
+          id, date: targetDate, project: projId, user: capataz.nombre, userId: capataz.id,
+          isDemo: false, startedAt: now(), closedAt: null, notes: '', activities: [], crew: [], machines: []
+        });
+        stateStore.selectedDayId = id;
+        localStorage.setItem('clikium_selected_day_id', id);
+        await save(nextState);
+        stateStore.pendingScope = 'today';
+        stateStore.view = 'today';
+      }
     } else if (type === 'settings') {
       const nextState = structuredClone(stateStore.state);
       const capataz = stateStore.catalog.capataces.find(p => p.id === val('userId'));
@@ -824,6 +874,25 @@ async function load() {
     try {
       stateStore.state = JSON.parse(cachedLocal);
     } catch (e) {}
+  }
+
+  // Sanitizar el estado cargado de caché/pending para asegurar que no contenga duplicados
+  if (stateStore.state) {
+    sanitizeStateDays(stateStore.state);
+  }
+  if (stateStore.pendingSyncState?.state) {
+    sanitizeStateDays(stateStore.pendingSyncState.state);
+  }
+
+  // Validar si savedDayId apunta a un día cerrado de una fecha anterior
+  if (savedDayId) {
+    const savedDay = stateStore.state?.days?.find(d => d.id === savedDayId);
+    if (savedDay && savedDay.date !== today() && savedDay.closedAt) {
+      stateStore.selectedDayId = null;
+      try { localStorage.removeItem('clikium_selected_day_id'); } catch (e) {}
+    } else {
+      stateStore.selectedDayId = savedDayId;
+    }
   }
 
   // Renderizar estado local de inmediato si existe

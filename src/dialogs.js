@@ -3,7 +3,7 @@
 // ============================================================================
 
 import {
-  $, esc, num, stamp, today, now, uid, dateLabel, icon, input, select,
+  $, esc, num, stamp, today, now, uid, dateLabel, timeOnly, icon, input, select,
   textarea, statusClass, badge, controlBadges, layerLabel, activityLabel,
   activityStage, getActivityStatus, requiredControlsLabel, sectorUsesPk,
   pkNumber, normalizePk, nameKey, toast, findAssignedActivity,
@@ -16,7 +16,7 @@ import {
 } from './utils.js';
 import {
   stateStore, selectedDay, allActivities, metadata, amount, capatazField,
-  sectorSelect, save, getMediaUrl
+  sectorSelect, save, getMediaUrl, foremanId
 } from './state.js';
 
 export const modal = $('#modal');
@@ -39,7 +39,44 @@ export function startForm() {
   const s = stateStore.state?.settings || {};
   const projDisplay = projectDisplayName(s.project);
   const projId = normalizeProjectId(s.project);
-  showDialog('Iniciar jornada', 'La jornada queda asociada a fecha, capataz y proyecto.', `<div class="form-grid">${input('date', 'Fecha', today(), 'type="date" required')}${capatazField()}<label class="field"><span>Proyecto</span><input type="text" value="${esc(projDisplay)}" readonly style="background:#f8fafc;font-weight:600;color:#1e293b"><input type="hidden" name="project" value="${esc(projId)}"></label></div>`, { form: 'start' });
+  const currentDate = today();
+  const capataz = stateStore.catalog?.capataces?.find(p => p.id === s.userId) || stateStore.catalog?.capataces?.[0];
+  const capId = capataz?.id || 'christofer_godoy';
+
+  const existingToday = (stateStore.state?.days || []).find(d => 
+    !d.isDemo && 
+    d.date === currentDate && 
+    normalizeProjectId(d.project) === projId && 
+    (foremanId(d) === capId || nameKey(d.user) === nameKey(capataz?.nombre))
+  );
+
+  let hintHtml = '';
+  if (existingToday) {
+    if (existingToday.closedAt) {
+      hintHtml = `<div class="notice" style="margin-bottom:12px;background:#fffbeb;border:1px solid #fde68a;color:#92400e;padding:10px 12px;border-radius:8px;font-size:0.86rem;line-height:1.4">
+        <strong>ℹ️ Jornada existente para hoy:</strong> Ya hay una jornada registrada para el ${dateLabel(currentDate)}, cerrada a las <strong>${timeOnly(existingToday.closedAt)}</strong>.<br>
+        Al confirmar, <strong>se reabrirá automáticamente</strong> para continuar registrando tus avances de terreno sin duplicar registros.
+      </div>`;
+    } else {
+      hintHtml = `<div class="notice" style="margin-bottom:12px;background:#f0f9ff;border:1px solid #bae6fd;color:#0369a1;padding:10px 12px;border-radius:8px;font-size:0.86rem;line-height:1.4">
+        <strong>ℹ️ Jornada en curso:</strong> Ya tienes una jornada abierta para hoy (${dateLabel(currentDate)}).<br>
+        Al confirmar, te conectaremos directamente a ella.
+      </div>`;
+    }
+  }
+
+  showDialog('Iniciar jornada', 'La jornada queda asociada a fecha, capataz y proyecto.', `
+    ${hintHtml}
+    <div class="form-grid">
+      ${input('date', 'Fecha', currentDate, 'type="date" required')}
+      ${capatazField()}
+      <label class="field">
+        <span>Proyecto</span>
+        <input type="text" value="${esc(projDisplay)}" readonly style="background:#f8fafc;font-weight:600;color:#1e293b">
+        <input type="hidden" name="project" value="${esc(projId)}">
+      </label>
+    </div>
+  `, { form: 'start' });
 }
 
 export function updateQuantityForm() {
